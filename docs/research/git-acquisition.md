@@ -34,6 +34,14 @@ With Git 2.47.3, local staged acquisition was exercised against both repository 
 A generic implementation that accepts 64-hex revisions but always runs plain `git init` would initialize SHA-1 storage and therefore cannot honestly promise SHA-256 acquisition. Staging object format must be selected from the validated revision length.
 
 ## Destination contract
+### Publication race discovered in adversarial review
+
+The initial implementation inherited ORAEC-TF's preflight-then-`replace()` publication pattern. Independent review demonstrated a TOCTOU hole: another process can create the destination after preflight but before publication, and `os.replace`/Path.replace may clobber that path.
+
+CopticScriptorium-TF already has a stronger, evidence-backed primitive in `copticscriptorium_tf._atomic.publish_path_no_clobber`: Linux `renameat2(RENAME_NOREPLACE)`, macOS `renamex_np(RENAME_EXCL)`, Windows no-replace rename semantics, and fail-closed behavior on unsupported platforms.
+
+tf-build therefore adopts the same private primitive for acquisition publication. A concurrent destination must survive unchanged and the staged checkout must be cleaned.
+
 
 The create-only default should accept:
 
