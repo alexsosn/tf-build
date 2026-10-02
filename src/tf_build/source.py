@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import re
+import shutil
 import subprocess
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -59,6 +61,85 @@ def _canonical_source(source: str | Path) -> Path:
     if not path.is_dir():
         raise GitSourceError(f"source path is not a directory: {path}")
     return path
+
+
+def fetch_git_source(
+    repository: str,
+    destination: str | Path,
+    *,
+    revision: str,
+) -> SourceSnapshot:
+    """Acquire one immutable Git commit and publish a verified clean checkout."""
+    requested_revision = validate_git_revision(revision)
+    if not isinstance(repository, str) or not repository.strip():
+        raise GitSourceError("Git repository locator must be a non-empty string")
+
+    target = Path(destination)
+    if target.is_symlink():
+        raise GitSourceError(f"destination must not be a symlink: {target}")
+
+    target_preexisted = target.exists()
+    if target_preexisted:
+        if not target.is_dir():
+            raise GitSourceError(
+                f"destination exists and is not a directory: {target}"
+            )
+        if any(target.iterdir()):
+            raise GitSourceError(f"destination is not empty: {target}")
+
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise GitSourceError(
+            f"could not create destination parent: {target.parent}"
+        ) from exc
+
+    staging = Path(
+        tempfile.mkdtemp(
+            prefix=f".{target.name}.tf-build-",
+            dir=target.parent,
+        )
+    )
+    removed_preexisting = False
+
+    try:
+        init_args = ["init", "--quiet"]
+        if len(requested_revision) == 64:
+            init_args.append("--object-format=sha256")
+        _run_git(staging, *init_args)
+        _run_git(staging, "remote", "add", "origin", repository)
+        _run_git(
+            staging,
+            "fetch",
+            "--depth",
+            "1",
+            "origin",
+            requested_revision,
+        )
+        _run_git(staging, "checkout", "--detach", "FETCH_HEAD")
+
+        snapshot = verify_git_source(
+            staging,
+            expected_revision=requested_revision,
+        )
+
+        if target_preexisted:
+            target.rmdir()
+            removed_preexisting = True
+
+        staging.replace(target)
+        published = target.resolve(strict=True)
+        return SourceSnapshot(
+            path=published,
+            repository_root=published,
+            revision=snapshot.revision,
+            object_format=snapshot.object_format,
+        )
+    except Exception:
+        shutil.rmtree(staging, ignore_errors=True)
+        if target_preexisted and removed_preexisting and not target.exists():
+            target.mkdir(parents=False, exist_ok=False)
+        raise
 
 
 def verify_git_source(
@@ -123,6 +204,7 @@ def verify_git_source(
 __all__ = [
     "GitSourceError",
     "SourceSnapshot",
+    "fetch_git_source",
     "validate_git_revision",
     "verify_git_source",
 ]
