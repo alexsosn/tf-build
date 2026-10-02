@@ -21,6 +21,34 @@ tf-build does not aim to replace Text-Fabric's `CV.walk` / `Fabric.save`, and it
 
 See [research.md](research.md), [design.md](design.md), and [plan.md](plan.md) for the evidence, architecture boundary and development sequence.
 
+## Operational build reports
+
+`tf_build.report` provides typed success-run metadata without conflating it with artifact certification:
+
+```python
+from tf_build.report import (
+    ArtifactSummary,
+    BuildReport,
+    GitSourceProvenance,
+    PhaseTiming,
+    Producer,
+)
+
+report = BuildReport(
+    producer=Producer("my-converter", "0.1.0"),
+    source=GitSourceProvenance(
+        "example/upstream",
+        "0123456789abcdef0123456789abcdef01234567",
+    ),
+    phases=(PhaseTiming("convert", 1.25),),
+    artifacts=(ArtifactSummary("tf", files=42, bytes=123456),),
+)
+
+print(report.to_json())
+```
+
+Artifact paths are portable logical POSIX-relative paths. Reports deliberately contain no file digests or release-certification claims; deterministic artifact identity is a separate layer.
+
 ## Git source verification
 
 The first reusable primitive verifies an already-local clean Git working tree without contacting a remote:
