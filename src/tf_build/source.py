@@ -10,6 +10,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
+from ._atomic import publish_path_no_clobber
+
 _REVISION_RE = re.compile(r"(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})\Z")
 
 
@@ -127,7 +129,7 @@ def fetch_git_source(
             target.rmdir()
             removed_preexisting = True
 
-        staging.replace(target)
+        publish_path_no_clobber(staging, target)
         published = target.resolve(strict=True)
         return SourceSnapshot(
             path=published,
