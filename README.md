@@ -21,6 +21,24 @@ tf-build does not aim to replace Text-Fabric's `CV.walk` / `Fabric.save`, and it
 
 See [research.md](research.md), [design.md](design.md), and [plan.md](plan.md) for the evidence, architecture boundary and development sequence.
 
+## Git source verification
+
+The first reusable primitive verifies an already-local clean Git working tree without contacting a remote:
+
+```python
+from tf_build.source import verify_git_source
+
+snapshot = verify_git_source(
+    "/path/to/source",
+    expected_revision="0123456789abcdef0123456789abcdef01234567",
+)
+
+print(snapshot.revision)
+print(snapshot.repository_root)
+```
+
+Only full 40- or 64-hex commit IDs are accepted. Branches, tags, `HEAD`, abbreviations, dirty worktrees and consumer-specific unversioned sentinels are rejected. Network acquisition is intentionally separate.
+
 ## Development
 
 Python 3.11+ is the initial supported runtime. Text-Fabric 13.x is the initial compatibility target.
