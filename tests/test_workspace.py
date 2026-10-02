@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+import tf_build.workspace as workspace_module
 from tf_build.workspace import BuildWorkspace, BuildWorkspaceError
 
 
@@ -164,3 +165,40 @@ def test_workspace_never_reuses_unpublished_staging(tmp_path: Path) -> None:
 
     assert not (destination / "obsolete.tf").exists()
     assert (destination / "current.tf").is_file()
+
+
+
+def test_workspace_surfaces_cleanup_failure_without_primary_exception(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    destination = tmp_path / "artifact"
+
+    def fail_cleanup(path: Path) -> None:
+        raise OSError("cleanup denied")
+
+    with pytest.raises(BuildWorkspaceError, match="cleanup"):
+        with BuildWorkspace(destination) as workspace:
+            staging = workspace.path
+            monkeypatch.setattr(workspace_module.shutil, "rmtree", fail_cleanup)
+
+    assert staging.exists()
+    assert not destination.exists()
+
+
+def test_workspace_preserves_primary_exception_and_notes_cleanup_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    destination = tmp_path / "artifact"
+
+    def fail_cleanup(path: Path) -> None:
+        raise OSError("cleanup denied")
+
+    with pytest.raises(RuntimeError, match="build failed") as caught:
+        with BuildWorkspace(destination) as workspace:
+            staging = workspace.path
+            monkeypatch.setattr(workspace_module.shutil, "rmtree", fail_cleanup)
+            raise RuntimeError("build failed")
+
+    assert staging.exists()
+    notes = getattr(caught.value, "__notes__", ())
+    assert any("cleanup" in note for note in notes)
