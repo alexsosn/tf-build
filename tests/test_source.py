@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+import tf_build.source as source_module
 from tf_build.source import (
     GitSourceError,
     fetch_git_source,
@@ -283,6 +284,40 @@ def test_fetch_git_source_failure_preserves_preexisting_empty_destination(
             str(tmp_path / "missing-repository"),
             destination,
             revision="a" * 40,
+        )
+
+    assert destination.is_dir()
+    assert not any(destination.iterdir())
+    assert not tuple(tmp_path.glob(".acquired.tf-build-*"))
+
+
+
+def test_fetch_git_source_does_not_clobber_destination_created_before_publish(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source, revision = _make_repo(tmp_path)
+    destination = tmp_path / "acquired"
+    real_verify = source_module.verify_git_source
+
+    def verify_then_race(
+        source_path: str | Path,
+        *,
+        expected_revision: str | None = None,
+    ):
+        snapshot = real_verify(
+            source_path,
+            expected_revision=expected_revision,
+        )
+        destination.mkdir()
+        return snapshot
+
+    monkeypatch.setattr(source_module, "verify_git_source", verify_then_race)
+
+    with pytest.raises(FileExistsError):
+        source_module.fetch_git_source(
+            str(source),
+            destination,
+            revision=revision,
         )
 
     assert destination.is_dir()
