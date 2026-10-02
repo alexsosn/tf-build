@@ -269,6 +269,7 @@ def test_fetch_git_source_failure_leaves_nonexistent_destination_absent(
         )
 
     assert not destination.exists()
+    assert not tuple(tmp_path.glob(".acquired.tf-build-*"))
 
 
 def test_fetch_git_source_failure_preserves_preexisting_empty_destination(
@@ -286,3 +287,4 @@ def test_fetch_git_source_failure_preserves_preexisting_empty_destination(
 
     assert destination.is_dir()
     assert not any(destination.iterdir())
+    assert not tuple(tmp_path.glob(".acquired.tf-build-*"))
