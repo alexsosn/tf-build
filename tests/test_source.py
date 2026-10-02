@@ -5,7 +5,12 @@ from pathlib import Path
 
 import pytest
 
-from tf_build.source import (\n    GitSourceError,\n    fetch_git_source,\n    validate_git_revision,\n    verify_git_source,\n)
+from tf_build.source import (
+    GitSourceError,
+    fetch_git_source,
+    validate_git_revision,
+    verify_git_source,
+)
 
 
 def _git(repo: Path, *args: str) -> str:
@@ -142,7 +147,6 @@ def test_verify_git_source_records_selected_subdirectory_and_repo_root(
 
     assert snapshot.path == selected.resolve()
     assert snapshot.repository_root == repo.resolve()
-
 
 
 def test_fetch_git_source_acquires_exact_sha1_to_new_destination(tmp_path: Path) -> None:
