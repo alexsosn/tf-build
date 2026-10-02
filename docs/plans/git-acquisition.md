@@ -28,6 +28,12 @@ Before invoking Git:
 - existing non-directory/non-empty destinations fail closed.
 
 ## Acquisition algorithm
+### Atomic no-clobber correction
+
+Publication must use a private atomic no-clobber primitive rather than `Path.replace`. The RED regression creates the destination after staged verification but before publication; the final operation must raise `FileExistsError`, preserve that concurrent destination, and remove staging residue.
+
+On platforms where an atomic no-clobber rename primitive is unavailable, publication fails closed instead of falling back to a racy preflight-plus-rename sequence.
+
 
 1. validate inputs;
 2. create destination parent as needed;
