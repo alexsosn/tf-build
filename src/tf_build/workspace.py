@@ -95,11 +95,27 @@ class BuildWorkspace:
         exc: BaseException | None,
         tb: TracebackType | None,
     ) -> None:
-        if self._state == "active" and self._staging is not None:
-            shutil.rmtree(self._staging, ignore_errors=True)
+        cleanup_error: OSError | None = None
+        staging = self._staging
+        if self._state == "active" and staging is not None:
+            try:
+                shutil.rmtree(staging)
+            except OSError as error:
+                cleanup_error = error
 
         self._staging = None
         self._state = "closed"
+
+        if cleanup_error is None:
+            return
+        if exc is not None:
+            exc.add_note(
+                f"tf-build staging cleanup failed for {staging}: {cleanup_error}"
+            )
+            return
+        raise BuildWorkspaceError(
+            f"could not clean unpublished build staging directory: {staging}"
+        ) from cleanup_error
 
 
 __all__ = ["BuildWorkspace", "BuildWorkspaceError"]
