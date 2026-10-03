@@ -37,7 +37,7 @@ def _validate_artifact_path(path: str) -> None:
     if (
         not path
         or path.startswith("/")
-        or "\" in path
+        or "\\" in path
         or any(part in {"", ".", ".."} for part in parts)
     ):
         raise ValueError(
