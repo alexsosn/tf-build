@@ -53,6 +53,21 @@ snapshot = fetch_git_source(
 
 Acquisition uses a sibling staging directory, verifies the detached checkout before publication, and supports both SHA-1 and SHA-256 Git repositories. Conversion code should still receive local inputs and remain network-free.
 
+## Safe build workspace
+
+Generated artifacts can be built and validated in a fresh sibling staging directory and published explicitly:
+
+```python
+from tf_build.workspace import BuildWorkspace
+
+with BuildWorkspace("/path/to/final-artifact") as workspace:
+    build_into(workspace.path)
+    validate(workspace.path)
+    workspace.publish()
+```
+
+The final destination must not already exist. Exiting the context without `publish()`, or leaving it through an exception, removes unpublished staging. Publication is atomic no-clobber on supported platforms; replacement of an existing artifact is intentionally a separate contract.
+
 ## Development
 
 Python 3.11+ is the initial supported runtime. Text-Fabric 13.x is the initial compatibility target.
