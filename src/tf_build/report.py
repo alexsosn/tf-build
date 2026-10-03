@@ -34,12 +34,13 @@ def _require_finite_number(value: int | float, label: str) -> None:
 def _validate_repository_locator(repository: str) -> None:
     _require_text(repository, "Git repository")
     lowered = repository.lower()
+    path_parts = repository.replace("\\", "/").split("/")
     if (
         lowered.startswith("file:")
-        or repository.startswith("~/")
-        or repository.startswith("~\\")
+        or repository.startswith("~")
         or PurePosixPath(repository).is_absolute()
         or PureWindowsPath(repository).is_absolute()
+        or any(part in {".", ".."} for part in path_parts)
     ):
         raise ValueError(
             "Git repository provenance must not be a local absolute/home path"
