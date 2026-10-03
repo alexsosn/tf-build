@@ -65,7 +65,36 @@ print(snapshot.revision)
 print(snapshot.repository_root)
 ```
 
-Only full 40- or 64-hex commit IDs are accepted. Branches, tags, `HEAD`, abbreviations, dirty worktrees and consumer-specific unversioned sentinels are rejected. Network acquisition is intentionally separate.
+Only full 40- or 64-hex commit IDs are accepted. Branches, tags, `HEAD`, abbreviations, dirty worktrees and consumer-specific unversioned sentinels are rejected.
+
+Pinned acquisition is explicit and separate from conversion:
+
+```python
+from tf_build.source import fetch_git_source
+
+snapshot = fetch_git_source(
+    "https://github.com/example/upstream.git",
+    "/path/to/fresh/source",
+    revision="0123456789abcdef0123456789abcdef01234567",
+)
+```
+
+Acquisition uses a sibling staging directory, verifies the detached checkout before publication, and supports both SHA-1 and SHA-256 Git repositories. Conversion code should still receive local inputs and remain network-free.
+
+## Safe build workspace
+
+Generated artifacts can be built and validated in a fresh sibling staging directory and published explicitly:
+
+```python
+from tf_build.workspace import BuildWorkspace
+
+with BuildWorkspace("/path/to/final-artifact") as workspace:
+    build_into(workspace.path)
+    validate(workspace.path)
+    workspace.publish()
+```
+
+The final destination must not already exist. Exiting the context without `publish()`, or leaving it through an exception, removes unpublished staging. Publication is atomic no-clobber on supported platforms; replacement of an existing artifact is intentionally a separate contract.
 
 ## Development
 
