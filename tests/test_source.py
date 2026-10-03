@@ -303,7 +303,7 @@ def test_fetch_git_source_does_not_clobber_destination_created_before_publish(
         source_path: str | Path,
         *,
         expected_revision: str | None = None,
-    ):
+    ) -> source_module.SourceSnapshot:
         snapshot = real_verify(
             source_path,
             expected_revision=expected_revision,
