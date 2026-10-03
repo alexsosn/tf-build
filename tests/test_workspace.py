@@ -195,7 +195,7 @@ def test_workspace_preserves_primary_exception_and_notes_cleanup_failure(
     with pytest.raises(RuntimeError, match="build failed") as caught:
         with BuildWorkspace(destination) as workspace:
             staging = workspace.path
-            monkeypatch.setattr(workspace_module.shutil, "rmtree", fail_cleanup)
+            monkeypatch.setattr("tf_build.workspace.shutil.rmtree", fail_cleanup)
             raise RuntimeError("build failed")
 
     assert staging.exists()
