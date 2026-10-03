@@ -27,6 +27,24 @@ def test_git_source_provenance_canonicalizes_sha1_and_sha256() -> None:
     assert sha256.object_format == "sha256"
 
 
+
+@pytest.mark.parametrize(
+    "repository",
+    [
+        "/tmp/source",
+        "C:/work/source",
+        r"C:\\work\\source",
+        r"\\\\server\\share\\source",
+        "file:///tmp/source",
+        "~/source",
+    ],
+)
+def test_git_source_provenance_rejects_local_absolute_or_home_paths(
+    repository: str,
+) -> None:
+    with pytest.raises(ValueError, match="repository"):
+        GitSourceProvenance(repository, "a" * 40)
+
 def test_git_source_provenance_rejects_symbolic_revision() -> None:
     with pytest.raises(ValueError, match="40- or 64-hex"):
         GitSourceProvenance("example/upstream", "main")
