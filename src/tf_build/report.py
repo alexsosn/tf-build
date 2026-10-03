@@ -6,6 +6,7 @@ import json
 import math
 import sys
 from dataclasses import dataclass
+from pathlib import PurePosixPath, PureWindowsPath
 from typing import Literal
 
 from .source import GitSourceError, validate_git_revision
@@ -28,6 +29,21 @@ def _require_finite_number(value: int | float, label: str) -> None:
         raise ValueError(f"{label} must be a numeric value")
     if isinstance(value, float) and not math.isfinite(value):
         raise ValueError(f"{label} must be finite")
+
+
+def _validate_repository_locator(repository: str) -> None:
+    _require_text(repository, "Git repository")
+    lowered = repository.lower()
+    if (
+        lowered.startswith("file:")
+        or repository.startswith("~/")
+        or repository.startswith("~\\")
+        or PurePosixPath(repository).is_absolute()
+        or PureWindowsPath(repository).is_absolute()
+    ):
+        raise ValueError(
+            "Git repository provenance must not be a local absolute/home path"
+        )
 
 
 def _validate_artifact_path(path: str) -> None:
@@ -65,7 +81,7 @@ class GitSourceProvenance:
     revision: str
 
     def __post_init__(self) -> None:
-        _require_text(self.repository, "Git repository")
+        _validate_repository_locator(self.repository)
         try:
             revision = validate_git_revision(self.revision)
         except GitSourceError as exc:
