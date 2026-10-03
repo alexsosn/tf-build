@@ -4,7 +4,6 @@ from pathlib import Path
 
 import pytest
 
-import tf_build.workspace as workspace_module
 from tf_build.workspace import BuildWorkspace, BuildWorkspaceError
 
 
@@ -179,7 +178,7 @@ def test_workspace_surfaces_cleanup_failure_without_primary_exception(
     with pytest.raises(BuildWorkspaceError, match="cleanup"):
         with BuildWorkspace(destination) as workspace:
             staging = workspace.path
-            monkeypatch.setattr(workspace_module.shutil, "rmtree", fail_cleanup)
+            monkeypatch.setattr("tf_build.workspace.shutil.rmtree", fail_cleanup)
 
     assert staging.exists()
     assert not destination.exists()
