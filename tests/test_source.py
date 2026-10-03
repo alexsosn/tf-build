@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import shutil
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -328,7 +329,7 @@ def test_fetch_git_source_surfaces_staging_cleanup_failure(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     destination = tmp_path / "acquired"
-    real_rmtree = source_module.shutil.rmtree
+    real_rmtree = shutil.rmtree
 
     def fail_staging_cleanup(
         path: str | Path,
@@ -340,7 +341,7 @@ def test_fetch_git_source_surfaces_staging_cleanup_failure(
             raise OSError("simulated cleanup failure")
         real_rmtree(path, *args, **kwargs)
 
-    monkeypatch.setattr(source_module.shutil, "rmtree", fail_staging_cleanup)
+    monkeypatch.setattr("tf_build.source.shutil.rmtree", fail_staging_cleanup)
 
     with pytest.raises(GitSourceError, match="Git") as caught:
         fetch_git_source(
