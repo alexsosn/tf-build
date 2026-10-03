@@ -23,7 +23,8 @@ peak_rss_bytes() -> int | None
 
 - all names/versions/locators are non-empty strings;
 - Git revision uses `validate_git_revision`;
-- logical artifact paths are normalized POSIX-relative paths with no traversal/backslashes;
+- Git repository provenance rejects local absolute/home/file locators so reports do not capture machine-specific source paths;
+- logical artifact paths are normalized POSIX-relative paths with no POSIX/Windows absolute form, traversal, or backslashes;
 - counts and byte sizes are non-negative integers and not bool;
 - timing/float metrics are finite and non-negative where required;
 - metric, phase and artifact paths are unique;
