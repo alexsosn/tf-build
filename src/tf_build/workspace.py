@@ -114,7 +114,7 @@ class BuildWorkspace:
             )
             return
         raise BuildWorkspaceError(
-            f"could not clean unpublished build staging directory: {staging}"
+            f"build staging cleanup failed for unpublished directory: {staging}"
         ) from cleanup_error
 
 
