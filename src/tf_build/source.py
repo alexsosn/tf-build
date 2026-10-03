@@ -137,10 +137,24 @@ def fetch_git_source(
             revision=snapshot.revision,
             object_format=snapshot.object_format,
         )
-    except Exception:
-        shutil.rmtree(staging, ignore_errors=True)
+    except Exception as error:
+        try:
+            shutil.rmtree(staging)
+        except FileNotFoundError:
+            pass
+        except OSError as cleanup_error:
+            error.add_note(
+                f"staging cleanup failed for {staging}: {cleanup_error}"
+            )
+
         if target_preexisted and removed_preexisting and not target.exists():
-            target.mkdir(parents=False, exist_ok=False)
+            try:
+                target.mkdir(parents=False, exist_ok=False)
+            except OSError as restore_error:
+                error.add_note(
+                    f"failed to restore caller-owned empty destination "
+                    f"{target}: {restore_error}"
+                )
         raise
 
 

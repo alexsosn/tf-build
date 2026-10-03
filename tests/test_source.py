@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import shutil
 import subprocess
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -290,8 +292,6 @@ def test_fetch_git_source_failure_preserves_preexisting_empty_destination(
     assert not any(destination.iterdir())
     assert not tuple(tmp_path.glob(".acquired.tf-build-*"))
 
-
-
 def test_fetch_git_source_does_not_clobber_destination_created_before_publish(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -303,7 +303,7 @@ def test_fetch_git_source_does_not_clobber_destination_created_before_publish(
         source_path: str | Path,
         *,
         expected_revision: str | None = None,
-    ):
+    ) -> source_module.SourceSnapshot:
         snapshot = real_verify(
             source_path,
             expected_revision=expected_revision,
@@ -323,3 +323,32 @@ def test_fetch_git_source_does_not_clobber_destination_created_before_publish(
     assert destination.is_dir()
     assert not any(destination.iterdir())
     assert not tuple(tmp_path.glob(".acquired.tf-build-*"))
+
+
+def test_fetch_git_source_surfaces_staging_cleanup_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    destination = tmp_path / "acquired"
+    real_rmtree = shutil.rmtree
+
+    def fail_staging_cleanup(
+        path: str | Path,
+        *args: Any,
+        **kwargs: Any,
+    ) -> None:
+        candidate = Path(path)
+        if candidate.name.startswith(".acquired.tf-build-"):
+            raise OSError("simulated cleanup failure")
+        real_rmtree(path, *args, **kwargs)
+
+    monkeypatch.setattr("tf_build.source.shutil.rmtree", fail_staging_cleanup)
+
+    with pytest.raises(GitSourceError, match="Git") as caught:
+        fetch_git_source(
+            str(tmp_path / "missing-repository"),
+            destination,
+            revision="a" * 40,
+        )
+
+    notes = getattr(caught.value, "__notes__", ())
+    assert any("staging cleanup failed" in note for note in notes)
