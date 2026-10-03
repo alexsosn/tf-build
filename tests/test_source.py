@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -333,8 +334,8 @@ def test_fetch_git_source_surfaces_staging_cleanup_failure(
 
     def fail_staging_cleanup(
         path: str | Path,
-        *args: object,
-        **kwargs: object,
+        *args: Any,
+        **kwargs: Any,
     ) -> None:
         candidate = Path(path)
         if candidate.name.startswith(".acquired.tf-build-"):
