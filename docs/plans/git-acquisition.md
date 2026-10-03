@@ -47,7 +47,7 @@ On platforms where an atomic no-clobber rename primitive is unavailable, publica
 10. rename/replace staging onto destination;
 11. return a snapshot whose selected path/root point to the published destination.
 
-On any failure, remove staging. Restore a caller-supplied empty destination if it was removed but publication did not complete.
+On any failure, remove staging. Restore a caller-supplied empty destination if it was removed but publication did not complete. If cleanup or restoration itself fails, preserve the primary exception and attach an explicit exception note describing the residual-state failure; never suppress it silently.
 
 ## RED-first tests
 
