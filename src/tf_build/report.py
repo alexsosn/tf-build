@@ -39,7 +39,7 @@ def _validate_repository_locator(repository: str) -> None:
         lowered.startswith("file:")
         or repository.startswith("~")
         or PurePosixPath(repository).is_absolute()
-        or PureWindowsPath(repository).is_absolute()
+        or bool(PureWindowsPath(repository).drive)
         or any(part in {".", ".."} for part in path_parts)
     ):
         raise ValueError(
@@ -54,7 +54,7 @@ def _validate_artifact_path(path: str) -> None:
     if (
         not path
         or path.startswith("/")
-        or PureWindowsPath(path).is_absolute()
+        or bool(PureWindowsPath(path).drive)
         or "\\" in path
         or any(part in {"", ".", ".."} for part in parts)
     ):
