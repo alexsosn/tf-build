@@ -57,6 +57,7 @@ def test_git_source_provenance_rejects_symbolic_revision() -> None:
         ".",
         "..",
         "/tmp/tf",
+        "C:/tmp/tf",
         "../tf",
         "tf/../other",
         "tf/./feature",
