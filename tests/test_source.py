@@ -291,8 +291,6 @@ def test_fetch_git_source_failure_preserves_preexisting_empty_destination(
     assert not any(destination.iterdir())
     assert not tuple(tmp_path.glob(".acquired.tf-build-*"))
 
-
-
 def test_fetch_git_source_does_not_clobber_destination_created_before_publish(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
