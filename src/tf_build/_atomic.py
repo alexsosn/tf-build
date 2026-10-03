@@ -5,8 +5,8 @@ from __future__ import annotations
 import ctypes
 import errno
 import os
-from pathlib import Path
 import sys
+from pathlib import Path
 
 _AT_FDCWD = -100
 _RENAME_NOREPLACE = 1
