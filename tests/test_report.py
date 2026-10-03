@@ -32,6 +32,7 @@ def test_git_source_provenance_canonicalizes_sha1_and_sha256() -> None:
     [
         "/tmp/source",
         "C:/work/source",
+        "C:source",
         r"C:\\work\\source",
         r"\\\\server\\share\\source",
         "file:///tmp/source",
@@ -78,6 +79,7 @@ def test_git_source_provenance_rejects_symbolic_revision() -> None:
         "..",
         "/tmp/tf",
         "C:/tmp/tf",
+        "C:tf/output",
         "../tf",
         "tf/../other",
         "tf/./feature",
