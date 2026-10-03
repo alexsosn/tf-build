@@ -60,7 +60,7 @@ A `GitSourceProvenance` records:
 - canonical full 40/64-hex revision;
 - object format derived from revision length.
 
-The repository locator is caller-declared provenance. tf-build does not claim that `verify_git_source` proved ownership by that remote.
+The repository locator is caller-declared provenance. tf-build does not claim that `verify_git_source` proved ownership by that remote. To keep the report portable, provenance rejects local absolute/home locators (POSIX/Windows/UNC, `file:`, and `~/...`); callers should record a stable repository URL or logical repository name instead.
 
 Archive/DOI provenance should be added only with a real acquisition/verification consumer.
 
@@ -68,7 +68,7 @@ Archive/DOI provenance should be added only with a real acquisition/verification
 
 Artifact paths in a report are logical POSIX-relative paths such as `tf`, `tf/0.4.0`, or `tf-provenance/0.4.0`.
 
-Reject absolute paths, `.`, `..`, empty components and backslashes. A build host can therefore serialize the same logical path regardless of its temporary checkout/workspace root.
+Reject POSIX and Windows absolute paths, `.`, `..`, empty components and backslashes. A build host can therefore serialize the same logical path regardless of its temporary checkout/workspace root.
 
 ## Metrics and diagnostics
 
