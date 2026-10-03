@@ -323,3 +323,32 @@ def test_fetch_git_source_does_not_clobber_destination_created_before_publish(
     assert destination.is_dir()
     assert not any(destination.iterdir())
     assert not tuple(tmp_path.glob(".acquired.tf-build-*"))
+
+
+def test_fetch_git_source_surfaces_staging_cleanup_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    destination = tmp_path / "acquired"
+    real_rmtree = source_module.shutil.rmtree
+
+    def fail_staging_cleanup(
+        path: str | Path,
+        *args: object,
+        **kwargs: object,
+    ) -> None:
+        candidate = Path(path)
+        if candidate.name.startswith(".acquired.tf-build-"):
+            raise OSError("simulated cleanup failure")
+        real_rmtree(path, *args, **kwargs)
+
+    monkeypatch.setattr(source_module.shutil, "rmtree", fail_staging_cleanup)
+
+    with pytest.raises(GitSourceError, match="Git") as caught:
+        fetch_git_source(
+            str(tmp_path / "missing-repository"),
+            destination,
+            revision="a" * 40,
+        )
+
+    notes = getattr(caught.value, "__notes__", ())
+    assert any("staging cleanup failed" in note for note in notes)
