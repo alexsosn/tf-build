@@ -37,7 +37,21 @@ print(snapshot.revision)
 print(snapshot.repository_root)
 ```
 
-Only full 40- or 64-hex commit IDs are accepted. Branches, tags, `HEAD`, abbreviations, dirty worktrees and consumer-specific unversioned sentinels are rejected. Network acquisition is intentionally separate.
+Only full 40- or 64-hex commit IDs are accepted. Branches, tags, `HEAD`, abbreviations, dirty worktrees and consumer-specific unversioned sentinels are rejected.
+
+Pinned acquisition is explicit and separate from conversion:
+
+```python
+from tf_build.source import fetch_git_source
+
+snapshot = fetch_git_source(
+    "https://github.com/example/upstream.git",
+    "/path/to/fresh/source",
+    revision="0123456789abcdef0123456789abcdef01234567",
+)
+```
+
+Acquisition uses a sibling staging directory, verifies the detached checkout before publication, and supports both SHA-1 and SHA-256 Git repositories. Conversion code should still receive local inputs and remain network-free.
 
 ## Development
 
