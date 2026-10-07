@@ -49,6 +49,32 @@ print(report.to_json())
 
 Artifact paths are portable logical POSIX-relative paths. Reports deliberately contain no file digests or release-certification claims; deterministic artifact identity is a separate layer.
 
+## Text-Fabric artifact validation
+
+`tf_build.validation` validates a generated TF artifact through a fresh Text-Fabric runtime load:
+
+```python
+from tf_build.validation import (
+    FeatureRequirement,
+    TFArtifactContract,
+    validate_tf_artifact,
+)
+
+contract = TFArtifactContract(
+    features=(
+        FeatureRequirement("lemma", "node", value_type="str"),
+        FeatureRequirement("dependency", "edge", edge_values=True),
+    ),
+    text_formats=("text-orig-full",),
+)
+
+result = validate_tf_artifact("/path/to/staged/tf", contract=contract)
+```
+
+The default `selective` mode loads only the structural dependencies and explicitly required features. Use `mode="exhaustive"` when every discovered node and edge feature must be parsed and loaded.
+
+Text-Fabric may create compiled `.tfx` cache files while loading. The validator clears that derived cache before returning or raising; substantive `*.tf` feature/config files are not rewritten.
+
 ## Git source verification
 
 The first reusable primitive verifies an already-local clean Git working tree without contacting a remote:
