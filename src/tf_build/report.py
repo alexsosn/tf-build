@@ -37,6 +37,7 @@ def _validate_repository_locator(repository: str) -> None:
     path_parts = repository.replace("\\", "/").split("/")
     if (
         lowered.startswith("file:")
+        or repository.startswith("\\\\")
         or repository.startswith("~")
         or PurePosixPath(repository).is_absolute()
         or bool(PureWindowsPath(repository).drive)
