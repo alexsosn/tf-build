@@ -66,9 +66,11 @@ Selective:
 - use `api.isLoaded(pretty=False)` to confirm required feature runtime information.
 
 Exhaustive:
-- fresh `Fabric.loadAll()`;
-- reject false/absent API;
-- all loadable node/edge features must survive full loading.
+- fresh `Fabric.load("")` and require a usable API;
+- derive the complete discovered node/edge set from metadata exploration;
+- call `Fabric.load(all_discovered_features, add=True)` explicitly and require success;
+- confirm the API reports every discovered loadable feature as loaded;
+- do not rely on `Fabric.loadAll()` as the success oracle because TF 13.1 discards the final add-load boolean.
 
 After either mode:
 - required text formats must exist in `api.T.formats`;
