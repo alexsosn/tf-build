@@ -24,7 +24,7 @@ Relevant supported behavior:
 - `Fabric.explore()` metadata-loads all discovered features and classifies node/edge/config/computed features without loading every feature body.
 - `Fabric.load(features)` always loads warp/config dependencies plus explicitly requested features and builds a fresh API.
 - `Api.isLoaded(pretty=False)` reports loaded feature kind, value type, edge-value status, metadata and source.
-- `Fabric.loadAll()` additionally loads every loadable node/edge feature.
+- `Fabric.loadAll()` attempts to load every loadable node/edge feature, but its 13.1 implementation discards the boolean result of the final `load(..., add=True)` call and returns the API created before that add-load. Its return value alone is therefore not a reliable exhaustive-success signal.
 - `T.formats`, `T.sectionTypes`, and `T.sectionFeatures` expose the compiled text/section configuration after a successful load.
 
 ## Validation levels
@@ -32,7 +32,7 @@ Relevant supported behavior:
 Expose two public runtime modes:
 
 1. **selective** (default): inspect all feature metadata, then fresh-load warp/config dependencies plus caller-required features. This is the normal build gate.
-2. **exhaustive**: fresh `loadAll()` and therefore parse/compile every loadable node and edge feature.
+2. **exhaustive**: fresh warp/config load followed by an explicit checked `load(all_discovered_features, add=True)`, so every loadable node and edge feature must parse/compile successfully. Do not use `loadAll()` as the success oracle because it ignores that add-load result in TF 13.1.
 
 Metadata inspection is always performed internally; it is not a separate public success mode because this ticket's purpose includes a clean runtime reload.
 
