@@ -72,10 +72,12 @@ def _feature_bytes(path: Path) -> dict[str, bytes]:
 
 def _corrupt_int_body(path: Path) -> None:
     raw = path.read_bytes()
-    header, separator, _body = raw.partition(b"\n\n")
-    assert separator == b"\n\n"
+    separator = b"\r\n\r\n" if b"\r\n\r\n" in raw else b"\n\n"
+    header, found, _body = raw.partition(separator)
+    assert found == separator
     assert b"@valueType=int" in header
-    path.write_bytes(header + separator + b"not-an-int\n")
+    newline = b"\r\n" if separator.startswith(b"\r\n") else b"\n"
+    path.write_bytes(header + separator + b"not-an-int" + newline)
 
 
 def test_selective_validation_uses_real_tf_and_preserves_feature_bytes(
