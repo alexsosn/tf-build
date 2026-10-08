@@ -54,7 +54,7 @@ Closed-world enumeration includes every regular file recursively except two fixe
 
 Everything else counts: `*.tf`, LICENSE, README/docs shipped inside the artifact, provenance/config files, and arbitrary other regular auxiliary files.
 
-Symlinks and non-regular filesystem entries fail closed rather than being dereferenced or ignored. Empty directories do not contribute; the identity is a file-tree identity.
+Symlinks and non-regular filesystem entries fail closed rather than being dereferenced or ignored. Exclusion is applied only after checking the boundary entry: an excluded `.tf` cache root must itself be a real directory, and an existing canonical manifest must be a real regular file. A symlink at either excluded name is still unsafe and fails. Empty directories do not contribute; the identity is a file-tree identity.
 
 ## Paths
 
