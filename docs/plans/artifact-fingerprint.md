@@ -43,9 +43,9 @@ Canonical constants:
 
 1. reject a symlinked/non-directory root;
 2. recursively inspect entries;
-3. skip any path below a component named `.tf`;
-4. skip only root `tf-build-manifest.json`;
-5. reject every included symlink or non-regular entry;
+3. when a component named `.tf` is encountered, require that cache root itself to be a real directory and then skip its contents; a symlinked/non-directory `.tf` entry fails;
+4. for root `tf-build-manifest.json`, require an existing entry to be a regular non-symlink file and exclude its bytes; a symlink/directory at that name fails;
+5. reject every other symlink or non-regular entry;
 6. convert included relative paths to strict UTF-8 POSIX strings;
 7. sort by UTF-8 path bytes.
 
@@ -141,7 +141,8 @@ At minimum:
 15. deterministic JSON has sorted keys and one trailing newline;
 16. verification succeeds for the original tree and fails diagnostically for missing/unexpected/changed files;
 17. writing the canonical manifest is atomic enough that recomputed fingerprint is unchanged and the JSON equals `to_json()`;
-18. symlinked canonical manifest target is rejected.
+18. symlinked canonical manifest target is rejected by both fingerprinting and writing;
+19. symlinked/non-directory `.tf` cache root is rejected rather than silently excluded.
 
 ## Integration
 
