@@ -67,13 +67,13 @@ def _files(root: Path, manifest: str | None) -> list[tuple[str, Path]]:
                 if item.is_symlink():
                     raise FingerprintError(f"artifact contains symlink: {relative}")
                 if item.is_dir(follow_symlinks=False):
-                    if item.name == ".tf":
-                        # Compiled Text-Fabric binary caches, not source features.
-                        continue
                     if relative == manifest:
                         raise FingerprintError(
                             f"manifest exclusion names an artifact directory: {relative}"
                         )
+                    if item.name == ".tf":
+                        # Compiled Text-Fabric binary caches, not source features.
+                        continue
                     walk(path, relative)
                 elif item.is_file(follow_symlinks=False):
                     if relative != manifest:
