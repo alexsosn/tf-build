@@ -123,7 +123,9 @@ print(result.level, result.feature_names)
   expensive release/integration gate for large corpora.
 
 Slot/node ontology and source-semantic checks remain the corpus project's
-responsibility. `otext.tf` is optional upstream; request it explicitly when
+responsibility. Runtime TF loading can create derived `.tf/` compiled caches;
+validation never intentionally rewrites the original `.tf` feature files.
+`otext.tf` is optional upstream; request it explicitly when
 the consuming corpus requires it.
 
 ## Development
