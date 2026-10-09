@@ -1,4 +1,8 @@
-"""Read-only structural and runtime validation for emitted Text-Fabric artifacts."""
+"""Structural and runtime validation of emitted Text-Fabric artifacts.
+
+Text-Fabric can generate compiled .tf/ caches during runtime loading; source .tf
+feature files are never intentionally rewritten by this validator.
+"""
 
 from __future__ import annotations
 
