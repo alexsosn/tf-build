@@ -9,6 +9,7 @@ from tf.fabric import Fabric
 
 from tf_build.validate import (
     ArtifactValidationError,
+    ValidationLevel,
     FeatureRequirement,
     validate_tf_artifact,
 )
@@ -16,7 +17,7 @@ from tf_build.validate import (
 
 def _dataset(tmp_path: Path) -> Path:
     directory = tmp_path / "artifact"
-    directory.mkdir()
+    directory.mkdir(parents=True)
     fabric = Fabric(locations=[str(directory)], silent="deep")
     saved = fabric.save(
         nodeFeatures={
@@ -58,7 +59,7 @@ def _corrupt_feature_body(path: Path) -> None:
 
 
 @pytest.mark.parametrize("level", ["metadata", "selected", "all"])
-def test_validation_levels_use_real_tf_artifact(tmp_path: Path, level: str) -> None:
+def test_validation_levels_use_real_tf_artifact(tmp_path: Path, level: ValidationLevel) -> None:
     directory = _dataset(tmp_path)
     result = validate_tf_artifact(
         directory,
