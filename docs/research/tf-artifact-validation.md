@@ -29,6 +29,8 @@ The result records the level actually performed. A metadata-only pass must never
 
 Required features are caller-supplied structural expectations: name, node/edge/config kind, `str`/`int` value type, and valued/unvalued edge flag. No corpus-specific feature names or node/slot types are built in.
 
+Text-Fabric's `Data.load()` may generate compiled `.tf/` / `.tfx` cache files during selected/all runtime loading. Therefore validator results are not a promise of a completely unchanged directory tree; the immutable boundary is the original `.tf` source feature bytes. A regression test records those bytes before and after full validation.
+
 Fail closed on absent directory, unsafe symlinked TF feature files, missing warp files, absent required features, metadata conflicts, and failed requested load. Ignore Text-Fabric's generated `.tf/` compiled cache; artifact fingerprinting is separate issue #7.
 
 ## Test strategy
