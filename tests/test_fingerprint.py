@@ -105,6 +105,17 @@ def test_only_explicit_manifest_is_excluded(tmp_path: Path) -> None:
     assert fingerprint_tree(root, manifest_path="BUILD-MANIFEST.json").digest != before.digest
 
 
+
+@pytest.mark.parametrize("excluded", [".tf", "module/.tf"])
+def test_manifest_cannot_exclude_compiled_cache_directory(
+    tmp_path: Path, excluded: str
+) -> None:
+    root = _root(tmp_path)
+    (root / "module" / ".tf").mkdir(parents=True)
+    (root / ".tf").mkdir()
+    with pytest.raises(FingerprintError, match="manifest"):
+        fingerprint_tree(root, manifest_path=excluded)
+
 def test_symlinks_are_rejected_without_following(tmp_path: Path) -> None:
     root = _root(tmp_path)
     outside = tmp_path / "outside"
