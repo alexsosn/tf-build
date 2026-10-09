@@ -63,7 +63,9 @@ def _file_features(directory: Path, *, require_otext: bool) -> tuple[str, ...]:
     if directory.is_symlink():
         raise ArtifactValidationError(f"TF artifact directory is a symlink: {directory}")
     if not directory.is_dir():
-        raise ArtifactValidationError(f"TF artifact directory is missing or not a directory: {directory}")
+        raise ArtifactValidationError(
+            f"TF artifact directory is missing or not a directory: {directory}"
+        )
 
     features: list[str] = []
     for path in directory.glob("*.tf"):
@@ -122,7 +124,10 @@ def _check_metadata(
                 f"feature {name} has value type {feature.dataType}, "
                 f"expected {requirement.value_type}"
             )
-        if requirement.edge_values is not None and bool(feature.edgeValues) != requirement.edge_values:
+        if (
+            requirement.edge_values is not None
+            and bool(feature.edgeValues) != requirement.edge_values
+        ):
             raise ArtifactValidationError(
                 f"feature {name} edgeValues={bool(feature.edgeValues)}, "
                 f"expected {requirement.edge_values}"
