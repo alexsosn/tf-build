@@ -80,7 +80,6 @@ def test_validation_levels_use_real_tf_artifact(tmp_path: Path, level: Validatio
     assert "count" in result.required_features
 
 
-
 def test_validation_does_not_change_source_tf_bytes(tmp_path: Path) -> None:
     directory = _dataset(tmp_path)
     before = {p.name: p.read_bytes() for p in directory.glob("*.tf")}
@@ -88,6 +87,7 @@ def test_validation_does_not_change_source_tf_bytes(tmp_path: Path) -> None:
     after = {p.name: p.read_bytes() for p in directory.glob("*.tf")}
     assert checked.level == "all"
     assert after == before
+
 
 def test_missing_or_incorrect_required_features_are_rejected(tmp_path: Path) -> None:
     directory = _dataset(tmp_path)
