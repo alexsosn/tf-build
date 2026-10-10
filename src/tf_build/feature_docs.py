@@ -148,8 +148,8 @@ def scan_tf_feature_headers(
 
 def _safe_text(value: str) -> str:
     """Escape Markdown control characters and embedded HTML as inert prose."""
-    escaped = _MD_PUNCTUATION.sub(r"\\\1", value)
-    return html.escape(escaped, quote=False).replace("\n", " ").replace("\r", " ")
+    plain = html.escape(value.replace("\n", " ").replace("\r", " "), quote=False)
+    return _MD_PUNCTUATION.sub(r"\\\1", plain)
 
 
 def render_feature_reference(
