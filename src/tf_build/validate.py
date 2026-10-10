@@ -107,6 +107,17 @@ def _check_metadata(
         feature = fabric.features.get(name)
         if name not in discovered or feature is None or feature.dataError:
             raise ArtifactValidationError(f"Text-Fabric could not read metadata of feature {name}")
+        # TF's Data._setDataType() logs invalid/missing @valueType and then
+        # silently substitutes 'str'; the normalized dataType is not proof
+        # that the shipped header declared a valid type.
+        if not feature.isConfig and feature.metaData.get("valueType") not in ("str", "int"):
+            raise ArtifactValidationError(
+                f"feature {name} lacks a valid declared @valueType"
+            )
+        if not feature.isEdge and feature.edgeValues:
+            raise ArtifactValidationError(
+                f"feature {name} declares @edgeValues but is not an edge"
+            )
 
     for requirement in requirements:
         name = requirement.name
@@ -123,9 +134,13 @@ def _check_metadata(
             raise ArtifactValidationError(
                 f"feature {name} has kind {actual_kind}, expected {requirement.kind}"
             )
-        if requirement.value_type is not None and feature.dataType != requirement.value_type:
+        if (
+            requirement.value_type is not None
+            and feature.metaData.get("valueType") != requirement.value_type
+        ):
             raise ArtifactValidationError(
-                f"feature {name} has value type {feature.dataType}, "
+                f"feature {name} declares value type "
+                f"{feature.metaData.get('valueType')!r}, "
                 f"expected {requirement.value_type}"
             )
         if (
