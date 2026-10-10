@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-from tf.fabric import Fabric
+from tf.fabric import Fabric  # type: ignore[import-untyped]
 
 ValidationLevel = Literal["metadata", "selected", "all"]
 FeatureKind = Literal["node", "edge", "config"]
