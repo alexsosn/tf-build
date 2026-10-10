@@ -208,6 +208,33 @@ snapshot under concurrent source mutation. `metadata` stays a cheap header
 check. `otext.tf` is optional upstream; request it explicitly when
 the consuming corpus requires it.
 
+## Preflight for unsafe Text-Fabric string values
+
+Text-Fabric 13.x escapes LF and TAB inside string feature values but writes
+literal CR (U+000D) unchanged. Python's universal-newline text loading can
+then silently shift a value onto another node. This occurred in a real ORAEC
+bibliography feature; ordinary node counts and successful TF loads did not
+prove attribution was correct.
+
+Before using Fabric.save:
+
+```python
+from tf_build.tf_strings import preflight_tf_save_values
+
+preflight_tf_save_values(node_features, edge_features)
+# Fabric.save(nodeFeatures=node_features, edgeFeatures=edge_features, ...)
+```
+
+For CV.walk or per-value writers, use
+`require_tf_safe_string(value, feature="text", node=word_node)`.
+For valued edges pass a target node as well. Either preflight raises
+`TFStringSafetyError` with feature/node context and no raw source value.
+LF, TAB, backslashes and other supported strings are preserved exactly.
+Consumers that need literal CR can encode it losslessly **in native TF
+features** before preflight, then check source-to-TF roundtrip parity.
+This preventive check neither patches Text-Fabric nor validates already
+emitted .tf data or scholarly semantics.
+
 ## Generated Text-Fabric feature reference
 
 `tf_build.feature_docs` scans **emitted** Text-Fabric feature-file headers
