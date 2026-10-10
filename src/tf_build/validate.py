@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import stat
 import tempfile
 from collections.abc import Collection, Iterator
 from contextlib import contextmanager
@@ -158,6 +159,24 @@ def _check_metadata(
     return categories
 
 
+def _copy_source_without_following(source: Path, target: Path) -> None:
+    """Copy one regular TF feature without blocking on a raced FIFO."""
+    flags = os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0)
+    if os.name == "posix":
+        nonblocking = getattr(os, "O_NONBLOCK", None)
+        nofollow = getattr(os, "O_NOFOLLOW", None)
+        if nonblocking is None or nofollow is None:
+            raise ArtifactValidationError("POSIX safe TF source open flags unavailable")
+        flags |= nonblocking | nofollow
+    with os.fdopen(os.open(source, flags), "rb") as stream:
+        if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+            raise ArtifactValidationError(
+                f"TF source view includes a nonregular feature: {source.name}"
+            )
+        with target.open("xb") as output:
+            shutil.copyfileobj(stream, output, 1024 * 1024)
+
+
 @contextmanager
 def _uncached_source_view(
     directory: Path,
@@ -189,7 +208,7 @@ def _uncached_source_view(
                 try:
                     os.link(source, target, follow_symlinks=False)
                 except (OSError, NotImplementedError):
-                    shutil.copyfile(source, target, follow_symlinks=False)
+                    _copy_source_without_following(source, target)
                 if target.is_symlink() or not target.is_file():
                     raise ArtifactValidationError(
                         f"TF source view includes a nonregular feature: {name}"
