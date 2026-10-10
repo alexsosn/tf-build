@@ -96,6 +96,28 @@ with BuildWorkspace("/path/to/final-artifact") as workspace:
 
 The final destination must not already exist. Exiting the context without `publish()`, or leaving it through an exception, removes unpublished staging. Publication is atomic no-clobber on supported platforms; replacement of an existing artifact is intentionally a separate contract.
 
+## Raw-byte artifact fingerprints
+
+`tf_build.fingerprint` computes a versioned SHA-256 identity of every
+regular shipped file under an artifact directory:
+
+```python
+from tf_build.fingerprint import fingerprint_tree
+
+fingerprint = fingerprint_tree(
+    "/path/to/generated/tf",
+    manifest_path="BUILD-MANIFEST.json",
+)
+print(fingerprint.algorithm, fingerprint.digest)
+```
+
+The fingerprint uses **actual file bytes**. No TF timestamp/header normalization
+occurs here; consumers requiring byte-reproducible output must normalize before
+fingerprinting. Text-Fabric's derived `.tf/` compiled caches and the optional
+explicit manifest file are excluded; all other regular files including licenses
+and documentation contribute. Symlinks/nonregular entries fail closed.
+Fingerprinting a concurrently changing directory is not an atomic snapshot.
+
 ## Text-Fabric artifact validation
 
 Use `tf_build.validate` to verify an emitted dataset independently of its
