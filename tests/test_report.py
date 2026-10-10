@@ -116,6 +116,35 @@ def test_artifact_summary_rejects_nonportable_logical_paths(path: str) -> None:
         ArtifactSummary(path, files=1, bytes=1)
 
 
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "tf/SECRET\x00feature.tf",
+        "tf/SECRET\nfeature.tf",
+        "tf/SECRET\rfeature.tf",
+        "tf/SECRET\tfeature.tf",
+        "tf/SECRET\x1f/feature.tf",
+        "tf/nested/SECRET\x7ffeature.tf",
+    ],
+)
+def test_report_artifact_path_rejects_control_characters_without_echoing(
+    path: str,
+) -> None:
+    with pytest.raises(ValueError, match="artifact path.*control") as caught:
+        ArtifactSummary(path, files=1, bytes=1)
+    assert "SECRET" not in str(caught.value)
+
+
+def test_report_artifact_path_accepts_nested_unicode_and_punctuation() -> None:
+    value = "tf/𐎀 archive/feature (draft)+copy.tf"
+    report = BuildReport(
+        producer=Producer("example", "1.0"),
+        artifacts=(ArtifactSummary(value, files=1, bytes=2),),
+    )
+    assert json.loads(report.to_json())["artifacts"][0]["path"] == value
+
+
 @pytest.mark.parametrize(
     ("files", "bytes_"),
     [
