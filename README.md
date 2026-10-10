@@ -304,6 +304,15 @@ python -m pytest -q
 
 Autonomous coding agents must start with [AGENTS.md](AGENTS.md). Every behavior-changing ticket follows research → plan/design → RED-first TDD → implementation → exact-head tests → logically independent adversarial review.
 
+CI also builds a noneditable distribution wheel and imports every public module
+from a fresh virtual environment **outside** the checkout. The independent
+`scripts/check_installed_wheel.py` smoke deliberately fails before wheel
+installation (RED), then passes after installation (GREEN). This catches
+missing modules and accidental editable-path imports that ordinary tests cannot.
+Run the wheel build locally with `python -m pip wheel --no-deps -w dist .`;
+the CI distribution job provides the isolation and dependency-install check.
+
+
 ## License
 
 MIT. This repository contains reusable software infrastructure; corpus/source data remain governed by their own projects and licences.
