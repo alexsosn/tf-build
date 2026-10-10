@@ -44,7 +44,7 @@ jobs:
           python-version: "3.12"
       - name: Build wheel without editable installation
         run: python -m pip wheel --no-deps --wheel-dir "$RUNNER_TEMP/wheels" .
-      - name: Installed wheel smoke: RED then GREEN
+      - name: Installed wheel smoke (RED then GREEN)
         shell: bash
         run: |
           set -euo pipefail
