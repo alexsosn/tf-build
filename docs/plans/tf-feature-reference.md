@@ -39,6 +39,7 @@ The scanner consumes **real files**, not the converter's schema. The renderer is
 7. Deterministic module/name ordering and exact-repeat page contents; no dependence on directory enumeration.
 8. Incorrect module identifiers/names and duplicate input records fail, not silently overwrite output pages.
 9. Optional descriptions from consumer override display prose but not the published artifact metadata.
+10. Unterminated oversized headers fail within bounded inspection (256 Ki characters total; 64 Ki per line).
 
 ## Implementation
 
