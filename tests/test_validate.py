@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import errno
 import os
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -311,6 +312,153 @@ def test_copy_fallback_rejects_fifo_swap_before_blocking_read(
         validate_tf_artifact(directory, level="all")
     assert intercepted
     assert not tuple(tmp_path.glob(".tf-build-source-verify-*"))
+
+
+
+@pytest.mark.parametrize("level", ["selected", "all"])
+@pytest.mark.parametrize("force_copy", [False, True])
+def test_readonly_parent_fallback_validates_real_tf_without_mutation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    level: ValidationLevel,
+    force_copy: bool,
+) -> None:
+    directory = _dataset(tmp_path)
+    upstream = Fabric(locations=[str(directory)], silent="deep")
+    assert upstream.load(("count",), silent="deep")
+    source_before = {p.name: p.read_bytes() for p in directory.glob("*.tf")}
+    cache_before = {
+        str(p.relative_to(directory)): p.read_bytes()
+        for p in (directory / ".tf").rglob("*.tfx")
+    }
+    assert cache_before
+    real_stage = tempfile.TemporaryDirectory
+    attempts: list[str] = []
+    created: list[Path] = []
+
+    def readonly_parent(
+        *, prefix: str, dir: str | Path | None = None
+    ) -> tempfile.TemporaryDirectory[str]:
+        if dir is not None and Path(dir) == directory.parent:
+            attempts.append("sibling")
+            raise PermissionError(errno.EACCES, "read-only corpus parent")
+        attempts.append("system")
+        stage = real_stage(prefix=prefix, dir=dir)
+        created.append(Path(stage.name))
+        return stage
+
+    monkeypatch.setattr(
+        "tf_build.validate.tempfile.TemporaryDirectory", readonly_parent
+    )
+    copy_needed: list[str] = []
+    if force_copy:
+        native_link = os.link
+
+        def cross_device_link(
+            src: str | os.PathLike[str],
+            dst: str | os.PathLike[str],
+            *,
+            follow_symlinks: bool = True,
+        ) -> None:
+            if Path(src) == directory / "count.tf":
+                copy_needed.append("count")
+                raise OSError(errno.EXDEV, "cross-device simulated")
+            native_link(src, dst, follow_symlinks=follow_symlinks)
+
+        monkeypatch.setattr("tf_build.validate.os.link", cross_device_link)
+
+    verified = validate_tf_artifact(
+        directory,
+        level=level,
+        required_features=(FeatureRequirement("count", kind="node", value_type="int"),),
+    )
+    assert verified.level == level
+    assert attempts == ["sibling", "system"]
+    assert len(created) == 1
+    assert not created[0].exists()
+    assert copy_needed == (["count"] if force_copy else [])
+    assert source_before == {p.name: p.read_bytes() for p in directory.glob("*.tf")}
+    assert cache_before == {
+        str(p.relative_to(directory)): p.read_bytes()
+        for p in (directory / ".tf").rglob("*.tfx")
+    }
+
+
+@pytest.mark.parametrize("second_errno", [errno.EACCES, errno.EROFS])
+def test_readonly_validation_fails_closed_if_system_temp_unavailable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, second_errno: int
+) -> None:
+    directory = _dataset(tmp_path)
+    source_before = {p.name: p.read_bytes() for p in directory.glob("*.tf")}
+    attempts: list[str] = []
+
+    def deny_both(
+        *, prefix: str, dir: str | Path | None = None
+    ) -> tempfile.TemporaryDirectory[str]:
+        attempts.append("sibling" if dir is not None else "system")
+        number = errno.EACCES if dir is not None else second_errno
+        raise OSError(number, "staging inaccessible")
+
+    monkeypatch.setattr("tf_build.validate.tempfile.TemporaryDirectory", deny_both)
+    with pytest.raises(ArtifactValidationError, match="validation directory"):
+        validate_tf_artifact(directory, level="all")
+    assert attempts == ["sibling", "system"]
+    assert source_before == {p.name: p.read_bytes() for p in directory.glob("*.tf")}
+
+
+def test_source_stage_full_disk_error_does_not_fallback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    directory = _dataset(tmp_path)
+    attempts: list[str] = []
+
+    def out_of_space(
+        *, prefix: str, dir: str | Path | None = None
+    ) -> tempfile.TemporaryDirectory[str]:
+        attempts.append("sibling" if dir is not None else "system")
+        raise OSError(errno.ENOSPC, "full disk")
+
+    monkeypatch.setattr("tf_build.validate.tempfile.TemporaryDirectory", out_of_space)
+    with pytest.raises(ArtifactValidationError, match="validation directory"):
+        validate_tf_artifact(directory, level="selected")
+    assert attempts == ["sibling"]
+
+
+def test_readonly_parent_fallback_still_rejects_stale_cache_corrupted_source(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    directory = _dataset(tmp_path)
+    upstream = Fabric(locations=[str(directory)], silent="deep")
+    assert upstream.load(("count",), silent="deep")
+    cached = tuple((directory / ".tf").rglob("count.tfx"))
+    assert cached
+    cached_before = {p: p.read_bytes() for p in cached}
+    feature = directory / "count.tf"
+    original_stat = feature.stat()
+    _corrupt_feature_body(feature)
+    os.utime(feature, ns=(original_stat.st_atime_ns, original_stat.st_mtime_ns))
+    real_stage = tempfile.TemporaryDirectory
+    created: list[Path] = []
+
+    def readonly_parent(
+        *, prefix: str, dir: str | Path | None = None
+    ) -> tempfile.TemporaryDirectory[str]:
+        if dir is not None:
+            raise PermissionError(errno.EACCES, "read-only parent")
+        stage = real_stage(prefix=prefix, dir=dir)
+        created.append(Path(stage.name))
+        return stage
+
+    monkeypatch.setattr("tf_build.validate.tempfile.TemporaryDirectory", readonly_parent)
+    with pytest.raises(ArtifactValidationError, match="load"):
+        validate_tf_artifact(
+            directory,
+            level="all",
+            required_features=(FeatureRequirement("count", kind="node"),),
+        )
+    assert len(created) == 1
+    assert not created[0].exists()
+    assert cached_before == {p: p.read_bytes() for p in cached}
 
 
 def test_symlink_artifact_and_tf_feature_are_rejected(tmp_path: Path) -> None:
