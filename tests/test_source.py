@@ -205,7 +205,7 @@ def test_ignored_git_inventory_respects_command_timeout(
     def observe_git(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess[str]:
         command = args[0]
         if isinstance(command, list) and "ls-files" in command:
-            assert "ignored" in command
+            assert "--ignored" in command
             seen.append(kwargs["timeout"])
         return cast(subprocess.CompletedProcess[str], native_run(*args, **kwargs))
 
