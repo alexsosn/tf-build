@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from tf.fabric import Fabric
+from tf.fabric import Fabric  # type: ignore[import-untyped]
 
 from tf_build.validate import (
     ArtifactValidationError,
