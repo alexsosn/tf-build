@@ -173,6 +173,39 @@ def test_fetch_git_source_acquires_exact_sha1_to_new_destination(tmp_path: Path)
     assert detached.returncode != 0
 
 
+def test_acquired_checkout_does_not_persist_credential_bearing_remote(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source, revision = _make_repo(tmp_path)
+    destination = tmp_path / "acquired"
+    secret = "TEST_PRIVATE_TOKEN_42"
+    locator = f"https://alice:{secret}@example.invalid/project.git"
+    global_config = tmp_path / "git-credentials-rewrite.conf"
+    # This exercises the *real* Git transport offline. The scoped insteadOf
+    # rewrite sends the token-bearing source URL to an actual local repo.
+    subprocess.run(
+        [
+            "git", "config", "--file", str(global_config),
+            f"url.{source}.insteadOf", locator,
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(global_config))
+
+    snapshot = fetch_git_source(locator, destination, revision=revision)
+    assert snapshot.revision == revision
+    assert _git(destination, "rev-parse", "HEAD") == revision
+    assert _git(destination, "status", "--porcelain=v1") == ""
+    assert _git(destination, "remote") == ""
+    assert not (destination / ".git" / "FETCH_HEAD").exists()
+    assert (destination / "tracked.txt").read_text(encoding="utf-8") == "initial\n"
+    for path in (destination / ".git").rglob("*"):
+        if path.is_file():
+            assert secret.encode("ascii") not in path.read_bytes(), str(path)
+
+
 def test_fetch_git_source_replaces_preexisting_empty_destination(tmp_path: Path) -> None:
     source, revision = _make_repo(tmp_path)
     destination = tmp_path / "acquired"
@@ -384,7 +417,7 @@ def test_fetch_and_verify_accept_custom_timeout_against_real_local_git(
 
 
 @pytest.mark.parametrize("mode", ["timeout", "exit", "oserror"])
-def test_git_remote_failures_redact_credential_locators_in_formatted_tracebacks(
+def test_git_locator_failures_redact_credentials_in_formatted_tracebacks(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mode: str
 ) -> None:
     secret = "SECRET_CREDENTIAL"
@@ -396,7 +429,7 @@ def test_git_remote_failures_redact_credential_locators_in_formatted_tracebacks(
     def failed_remote(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess[str]:
         command = args[0]
         assert isinstance(command, list)
-        if "remote" in command:
+        if "remote" in command or "fetch" in command:
             if mode == "timeout":
                 raise subprocess.TimeoutExpired(command, 2.0, stderr=f"{secret} stderr")
             if mode == "exit":
