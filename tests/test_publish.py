@@ -14,8 +14,8 @@ def test_publish_directory_to_absent_target_keeps_complete_tree(tmp_path: Path) 
     stage.mkdir()
     nested = stage / "tf"
     nested.mkdir()
-    (nested / "otype.tf").write_bytes(b"@node\\n@valueType=str\\n\\n1\\tword\\n")
-    (stage / "conversion-summary.json").write_text('{"ok":true}\\n', encoding="utf-8")
+    (nested / "otype.tf").write_bytes(b"@node\n@valueType=str\n\n1\tword\n")
+    (stage / "conversion-summary.json").write_text('{"ok":true}\n', encoding="utf-8")
     final = tmp_path / "published"
 
     publish_path_no_clobber(stage, final)
@@ -23,7 +23,7 @@ def test_publish_directory_to_absent_target_keeps_complete_tree(tmp_path: Path) 
     assert not stage.exists()
     assert (final / "tf" / "otype.tf").read_bytes().startswith(b"@node")
     assert (final / "conversion-summary.json").read_text(encoding="utf-8") == (
-        '{"ok":true}\\n'
+        '{"ok":true}\n'
     )
 
 
