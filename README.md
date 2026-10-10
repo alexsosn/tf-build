@@ -75,6 +75,25 @@ print(snapshot.repository_root)
 
 Only full 40- or 64-hex commit IDs are accepted. Branches, tags, `HEAD`, abbreviations, dirty worktrees and consumer-specific unversioned sentinels are rejected.
 
+**Git status ignores ignored files.** Local ignored inputs (such as TLHdig-TF's
+`refs/` external sign lists) can affect a conversion without appearing in the
+ordinary clean status. Release workflows that require an empty ignored-file
+inventory can opt in:
+
+```python
+snapshot = verify_git_source(
+    "/path/to/source",
+    expected_revision="0123456789abcdef0123456789abcdef01234567",
+    reject_ignored_files=True,
+)
+```
+
+Strict verification checks the entire Git repository, even when `source`
+selects a subdirectory. This check is opt-in because normal developer trees
+contain ignored `.venv/`, binary caches and build outputs. It does not hash
+ignored input bytes, control sources outside Git, or guarantee an atomic
+snapshot. Pin or fingerprint any external corpus data separately.
+
 Pinned acquisition is explicit and separate from conversion:
 
 ```python
