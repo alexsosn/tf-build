@@ -384,6 +384,57 @@ def test_fetch_git_source_rejects_ambiguous_revision_before_destination_change(
     assert not destination.exists()
 
 
+
+@pytest.mark.parametrize(
+    "repository",
+    [
+        "--upload-pack=SECRET_COMMAND",
+        "--all",
+        "-q",
+        "https://example.invalid/SECRET\x00source.git",
+        "https://example.invalid/SECRET\nsource.git",
+        "https://example.invalid/SECRET\tsource.git",
+        "https://example.invalid/SECRET\x7fsource.git",
+    ],
+)
+def test_git_fetch_locator_preflight_rejects_options_and_controls_without_side_effects(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, repository: str
+) -> None:
+    parent = tmp_path / "new-parent"
+    destination = parent / "new-source"
+
+    def forbidden_git(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        raise AssertionError("no Git command may run for an unsafe source locator")
+
+    monkeypatch.setattr("tf_build.source.subprocess.run", forbidden_git)
+    with pytest.raises(GitSourceError, match="Git repository locator") as caught:
+        fetch_git_source(repository, destination, revision="a" * 40)
+    assert "SECRET" not in str(caught.value)
+    assert not parent.exists()
+
+
+def test_fetch_pinned_commit_passes_explicit_git_end_of_options(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    upstream, revision = _make_repo(tmp_path)
+    native_run = subprocess.run
+    observed: list[list[str]] = []
+
+    def watch_git(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        command = args[0]
+        if isinstance(command, list) and "fetch" in command:
+            observed.append(command)
+        return cast(subprocess.CompletedProcess[str], native_run(*args, **kwargs))
+
+    monkeypatch.setattr("tf_build.source.subprocess.run", watch_git)
+    snapshot = fetch_git_source(str(upstream), tmp_path / "copied", revision=revision)
+    assert snapshot.revision == revision
+    assert (snapshot.path / "tracked.txt").read_text(encoding="utf-8") == "initial\n"
+    assert len(observed) == 1
+    fetch = observed[0]
+    assert fetch.index("--") < fetch.index(str(upstream))
+
+
 def test_fetch_git_source_rejects_empty_repository_locator(tmp_path: Path) -> None:
     destination = tmp_path / "acquired"
 
