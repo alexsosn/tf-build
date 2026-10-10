@@ -9,8 +9,8 @@ from tf.fabric import Fabric
 
 from tf_build.validate import (
     ArtifactValidationError,
-    ValidationLevel,
     FeatureRequirement,
+    ValidationLevel,
     validate_tf_artifact,
 )
 
