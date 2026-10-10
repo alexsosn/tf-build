@@ -165,6 +165,26 @@ with BuildWorkspace("/path/to/final-artifact") as workspace:
 
 The final destination must not already exist. Exiting the context without `publish()`, or leaving it through an exception, removes unpublished staging. Publication is atomic no-clobber on supported platforms; replacement of an existing artifact is intentionally a separate contract.
 
+For an external host that **already owns staging** and only needs final
+publication, use the narrower public path publisher:
+
+```python
+from tf_build.publish import publish_path_no_clobber
+
+# Prepare and validate the complete private staged directory first.
+publish_path_no_clobber("/path/to/validated-stage", "/path/to/final-artifact")
+```
+
+The destination must be absent **at the instant of promotion**. A new empty
+directory, file or symlink created by another actor is not overwritten; the
+caller retains responsibility for cleanup when publication raises. On supported
+systems this uses Linux `renameat2(RENAME_NOREPLACE)`, macOS
+`renamex_np(RENAME_EXCL)`, or Windows no-overwrite `os.rename`; unsupported
+systems fail closed. It is **not** a backup/replacement API, content-validation
+gate, fsync/durability guarantee, or defense against changes to parent
+directories. `BuildWorkspace` uses this same primitive but also owns its
+private staging and cleanup lifecycle.
+
 ## Raw-byte artifact fingerprints
 
 `tf_build.fingerprint` computes a versioned SHA-256 identity of every
