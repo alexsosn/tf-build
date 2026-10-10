@@ -14,7 +14,7 @@ Existing tests accept `example/upstream`, `https://github.com/example/upstream.g
 
 ## Decision
 
-For schemes of the form `scheme://authority/path`, reject any query or fragment; reject `password` in userinfo regardless of scheme; and reject **all** HTTP(S) authority userinfo, including username-only. Preserve SSH username-only locators (`ssh://git@host/path`) but disallow passwords. For SCP syntax, retain `git@host:path` without query/fragment. Reject `?` and `#` in non-URL locator strings. Treat malformed URL parsing as a validation failure.
+Reject ASCII control characters before URI parsing to prevent malformed locator bypasses. For schemes of the form `scheme://authority/path`, reject any query or fragment; reject `password` in userinfo regardless of scheme; and reject **all** HTTP(S) authority userinfo, including username-only. Preserve SSH username-only locators (`ssh://git@host/path`) but disallow passwords. For SCP syntax, retain `git@host:path` without query/fragment. Reject `?` and `#` in non-URL locator strings. Treat malformed URL parsing as a validation failure.
 
 Do not try partial token masking or secretly rewrite a user-supplied locator; callers should pass a separately sanitized provenance repository field. An SSH username can theoretically be an access token and credentials can be embedded in arbitrary opaque path segments, so this is a bounded policy, **not** a general secret detector.
 
