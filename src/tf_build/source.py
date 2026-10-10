@@ -209,9 +209,16 @@ def verify_git_source(
     *,
     expected_revision: str | None = None,
     timeout_seconds: float = _DEFAULT_GIT_TIMEOUT_SECONDS,
+    reject_ignored_files: bool = False,
 ) -> SourceSnapshot:
-    """Verify a clean local Git working tree without contacting any remote."""
+    """Verify a clean local Git working tree without contacting any remote.
+
+    Opt-in ignored-file rejection detects local non-HEAD inputs inside the
+    entire repository, not just the selected source subdirectory.
+    """
     timeout = _validated_timeout(timeout_seconds)
+    if not isinstance(reject_ignored_files, bool):
+        raise ValueError("reject_ignored_files must be a boolean")
     expected = (
         None
         if expected_revision is None
@@ -260,6 +267,24 @@ def verify_git_source(
     )
     if status:
         raise GitSourceError(f"Git working tree is dirty: {repository_root}")
+
+    if reject_ignored_files:
+        # Git status intentionally omits ignored files. Scan from the toplevel:
+        # ls-files invoked from a nested source path silently misses siblings.
+        ignored = _run_git(
+            repository_root,
+            "ls-files",
+            "--others",
+            "--ignored",
+            "--exclude-standard",
+            "--directory",
+            "--no-empty-directory",
+            "-z",
+            timeout_seconds=timeout,
+        )
+        if ignored:
+            # Ignored file paths can themselves contain private information.
+            raise GitSourceError("Git working tree contains ignored local files")
 
     object_format: Literal["sha1", "sha256"] = (
         "sha1" if len(revision) == 40 else "sha256"

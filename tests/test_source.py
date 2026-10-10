@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import traceback
@@ -99,6 +100,146 @@ def test_verify_git_source_accepts_clean_sha256_checkout(tmp_path: Path) -> None
     assert len(revision) == 64
     assert snapshot.revision == revision
     assert snapshot.object_format == "sha256"
+
+
+
+def test_opt_in_git_verification_rejects_ignored_nonversioned_inputs(
+    tmp_path: Path,
+) -> None:
+    repo, _ = _make_repo(tmp_path)
+    (repo / ".gitignore").write_text("raw/\n", encoding="utf-8")
+    _git(repo, "add", ".gitignore")
+    _git(repo, "commit", "--quiet", "-m", "ignore fetched external inputs")
+    revision = _git(repo, "rev-parse", "HEAD")
+    (repo / "raw").mkdir()
+    ignored_input = repo / "raw" / "input.tsv"
+    ignored_input.write_text("externally downloaded source\n", encoding="utf-8")
+
+    assert _git(
+        repo, "status", "--porcelain=v1", "--untracked-files=all",
+        "--ignore-submodules=none",
+    ) == ""
+    assert "raw/" in _git(
+        repo, "ls-files", "--others", "--ignored", "--exclude-standard", "--directory"
+    )
+    assert verify_git_source(repo, expected_revision=revision).revision == revision
+    with pytest.raises(GitSourceError, match="ignored") as error:
+        verify_git_source(
+            repo, expected_revision=revision, reject_ignored_files=True
+        )
+    assert "raw/" not in str(error.value)
+    assert "input.tsv" not in str(error.value)
+
+    ignored_input.unlink()
+    strict = verify_git_source(
+        repo, expected_revision=revision, reject_ignored_files=True
+    )
+    assert strict.revision == revision
+
+
+
+def test_strict_ignored_inventory_skips_empty_ignored_directories(
+    tmp_path: Path,
+) -> None:
+    repo, _ = _make_repo(tmp_path)
+    (repo / ".gitignore").write_text("raw/\n", encoding="utf-8")
+    _git(repo, "add", ".gitignore")
+    _git(repo, "commit", "--quiet", "-m", "exclude local data directory")
+    revision = _git(repo, "rev-parse", "HEAD")
+    (repo / "raw").mkdir()
+
+    # Git's --directory without --no-empty-directory lists this empty folder.
+    assert "raw/" in _git(
+        repo, "ls-files", "--others", "--ignored", "--exclude-standard", "--directory"
+    )
+    assert _git(
+        repo, "ls-files", "--others", "--ignored", "--exclude-standard",
+        "--directory", "--no-empty-directory",
+    ) == ""
+    checked = verify_git_source(repo, reject_ignored_files=True)
+    assert checked.revision == revision
+
+
+
+@pytest.mark.skipif(
+    os.name == "nt", reason="Windows filesystems disallow whitespace-only filenames"
+)
+def test_strict_ignored_inventory_detects_whitespace_only_filenames(
+    tmp_path: Path,
+) -> None:
+    repo, _ = _make_repo(tmp_path)
+    (repo / ".gitignore").write_text("*\n", encoding="utf-8")
+    _git(repo, "add", "-f", ".gitignore")
+    _git(repo, "commit", "--quiet", "-m", "ignore all local data")
+    ignored_file = repo / " "
+    ignored_file.write_text("nonversioned input\n", encoding="utf-8")
+
+    # The existing _run_git/.strip() collapses Git's " \n" output to "".
+    assert _git(
+        repo, "ls-files", "--others", "--ignored", "--exclude-standard",
+        "--directory", "--no-empty-directory",
+    ) == ""
+    with pytest.raises(GitSourceError, match="ignored"):
+        verify_git_source(repo, reject_ignored_files=True)
+
+
+def test_strict_ignored_inventory_is_repository_wide_not_subdirectory_only(
+    tmp_path: Path,
+) -> None:
+    repo, _ = _make_repo(tmp_path)
+    selected = repo / "selected"
+    selected.mkdir()
+    (selected / "tracked.txt").write_text("selected input\n", encoding="utf-8")
+    (repo / ".gitignore").write_text("raw/\n", encoding="utf-8")
+    _git(repo, "add", ".gitignore", "selected/tracked.txt")
+    _git(repo, "commit", "--quiet", "-m", "selected corpus")
+    revision = _git(repo, "rev-parse", "HEAD")
+    (repo / "raw").mkdir()
+    (repo / "raw" / "references.txt").write_text("unversioned\n", encoding="utf-8")
+
+    assert _git(
+        selected, "ls-files", "--others", "--ignored", "--exclude-standard",
+        "--directory",
+    ) == ""
+    assert verify_git_source(selected, expected_revision=revision).path == (
+        selected.resolve()
+    )
+    with pytest.raises(GitSourceError, match="ignored") as error:
+        verify_git_source(selected, reject_ignored_files=True)
+    assert "references.txt" not in str(error.value)
+
+
+@pytest.mark.parametrize("bad", [None, 0, 1, "true", 2.5])
+def test_reject_ignored_files_option_requires_boolean_before_git_io(
+    tmp_path: Path, bad: object
+) -> None:
+    with pytest.raises(ValueError, match="reject_ignored_files"):
+        verify_git_source(
+            tmp_path / "nonexistent", reject_ignored_files=bad  # type: ignore[arg-type]
+        )
+
+
+def test_ignored_git_inventory_respects_command_timeout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo, revision = _make_repo(tmp_path)
+    native_run = subprocess.run
+    seen: list[float] = []
+
+    def observe_git(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        command = args[0]
+        if isinstance(command, list) and "ls-files" in command:
+            assert "--ignored" in command
+            seen.append(kwargs["timeout"])
+        return cast(subprocess.CompletedProcess[str], native_run(*args, **kwargs))
+
+    monkeypatch.setattr("tf_build.source.subprocess.run", observe_git)
+    checked = verify_git_source(
+        repo, expected_revision=revision, reject_ignored_files=True,
+        timeout_seconds=7.5,
+    )
+    assert checked.revision == revision
+    assert seen == [7.5]
 
 
 def test_verify_git_source_rejects_revision_mismatch(tmp_path: Path) -> None:
