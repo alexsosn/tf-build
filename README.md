@@ -108,6 +108,14 @@ snapshot = fetch_git_source(
 
 Acquisition uses a sibling staging directory, verifies the detached checkout before publication, and supports both SHA-1 and SHA-256 Git repositories. Conversion code should still receive local inputs and remain network-free.
 
+The repository locator is passed as a **positional** Git argument after an
+explicit end-of-options marker; dash-leading option-like strings and ASCII
+control characters are rejected before staging or Git execution. Use clean
+HTTPS/SSH/SCP URLs or a normal local path (prefix unusual dash-leading local
+pathnames with `./`). This avoids Git option parsing, not arbitrary Git
+transport, credential-helper or local-environment behavior.
+
+
 Acquisition fetches the pinned revision directly, without persisting the
 caller-supplied repository URL as a Git `origin` remote. The temporary
 `.git/FETCH_HEAD` ledger is removed before the detached checkout is published:
