@@ -55,6 +55,9 @@ def _validated_timeout(seconds: float) -> float:
 
 
 def _run_git(source: Path, *args: str, timeout_seconds: float) -> str:
+    # Only the fixed operation is safe to report; later arguments can contain
+    # caller-supplied repository credentials and URLs.
+    operation = args[0] if args else "inspection"
     try:
         result = subprocess.run(
             ["git", "-C", str(source), *args],
@@ -64,15 +67,23 @@ def _run_git(source: Path, *args: str, timeout_seconds: float) -> str:
             timeout=timeout_seconds,
         )
     except subprocess.TimeoutExpired as exc:
-        operation = args[0] if args else "inspection"
+        # Formatting a chained TimeoutExpired normally prints its raw command
+        # array. Construct a sanitized cause to preserve the exception type
+        # and duration without leaking the repository locator.
+        sanitized = subprocess.TimeoutExpired(["git", operation], exc.timeout)
         raise GitSourceError(
             f"Git command {operation!r} timed out after {timeout_seconds:g} seconds"
-        ) from exc
-    except (OSError, subprocess.CalledProcessError) as exc:
-        command = " ".join(args)
+        ) from sanitized
+    except subprocess.CalledProcessError as exc:
+        sanitized = subprocess.CalledProcessError(
+            exc.returncode, ["git", operation]
+        )
         raise GitSourceError(
-            f"Git inspection failed while running {command!r} for {source}"
-        ) from exc
+            f"Git command {operation!r} failed with exit status {exc.returncode}"
+        ) from sanitized
+    except OSError:
+        # A process-spawn exception can itself include untrusted path details.
+        raise GitSourceError(f"Git command {operation!r} could not start") from None
     return result.stdout.strip()
 
 
