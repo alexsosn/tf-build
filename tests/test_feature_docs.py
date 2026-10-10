@@ -121,6 +121,8 @@ def test_unknown_metadata_and_markers_preserved_and_rendered_safely(
         "@node\n@valueType=str\n@valueType=int\n\n1\tx\n",
         "@node\n@valueType=str\n@edgeValues\n\n1\tx\n",
         "@whatever\n@valueType=str\n\n1\tx\n",
+        "@valueType=str\n@node\n\n1\tx\n",
+        "@unknownMarker\n@edge\n@valueType=str\n\n1\t2\n",
         "@node\n@valueType=decimal\n\n1\tx\n",
     ],
 )
