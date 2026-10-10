@@ -34,7 +34,7 @@ The scanner consumes **real files**, not the converter's schema. The renderer is
 2. Cache directory `.tf/` plus arbitrary `scratch.tf/` ignored; malformed `*.tf` regular files rejected; `*.tf` symlinks rejected.
 3. Ignore body corruption during header scan (scan is *not* validation) and preserve original artifact bytes.
 4. Unknown metadata and standalone header markers retained and rendered safely (including HTML/script/Markdown injection payloads).
-5. No blank separator, conflicting primary markers, duplicated metadata keys and invalid kind-edge-value combinations rejected.
+5. No blank separator, missing first-line kind marker, conflicting primary markers, duplicated metadata keys and invalid kind-edge-value combinations rejected.
 6. Two modules with duplicate feature stems both survive under namespaced paths.
 7. Deterministic module/name ordering and exact-repeat page contents; no dependence on directory enumeration.
 8. Incorrect module identifiers/names and duplicate input records fail, not silently overwrite output pages.
