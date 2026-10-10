@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import errno
+import os
 from pathlib import Path
 
 import pytest
@@ -188,6 +190,127 @@ def test_exhaustive_load_detects_corrupt_unselected_feature(tmp_path: Path) -> N
     assert selected.level == "selected"
     with pytest.raises(ArtifactValidationError, match="load"):
         validate_tf_artifact(directory, level="all")
+
+
+
+@pytest.mark.parametrize("level", ["selected", "all"])
+def test_cached_binary_never_masks_corrupted_same_mtime_raw_tf(
+    tmp_path: Path, level: ValidationLevel
+) -> None:
+    directory = _dataset(tmp_path)
+    # Populate a compiled cache using upstream TF itself, independently of
+    # tf-build's validator, so the regression remains valid after the fix.
+    upstream = Fabric(locations=[str(directory)], silent="deep")
+    assert upstream.load(("count",), silent="deep")
+    cached = tuple((directory / ".tf").rglob("count.tfx"))
+    assert cached, "real Text-Fabric exhaustive load must compile a binary count cache"
+    cached_bytes = {p: p.read_bytes() for p in cached}
+    before = (directory / "count.tf").stat()
+
+    _corrupt_feature_body(directory / "count.tf")
+    os.utime(
+        directory / "count.tf",
+        ns=(before.st_atime_ns, before.st_mtime_ns),
+    )
+    assert min(p.stat().st_mtime_ns for p in cached) >= (
+        directory / "count.tf"
+    ).stat().st_mtime_ns
+
+    declared = validate_tf_artifact(
+        directory,
+        level="metadata",
+        required_features=(FeatureRequirement("count", kind="node", value_type="int"),),
+    )
+    assert declared.level == "metadata"
+
+    with pytest.raises(ArtifactValidationError, match="load"):
+        validate_tf_artifact(
+            directory,
+            level=level,
+            required_features=(FeatureRequirement("count", kind="node"),),
+        )
+
+    assert {p: p.read_bytes() for p in cached} == cached_bytes
+    assert not tuple(tmp_path.glob(".tf-build-source-verify-*"))
+
+
+def test_valid_source_load_does_not_rewrite_caller_compiled_cache(
+    tmp_path: Path,
+) -> None:
+    directory = _dataset(tmp_path)
+    upstream = Fabric(locations=[str(directory)], silent="deep")
+    assert upstream.load(("count",), silent="deep")
+    before_source = {
+        p.name: p.read_bytes() for p in directory.glob("*.tf") if p.is_file()
+    }
+    validate_tf_artifact(directory, level="all")
+    original_cache = {
+        str(p.relative_to(directory)): p.read_bytes()
+        for p in (directory / ".tf").rglob("*.tfx")
+    }
+    assert original_cache
+    validate_tf_artifact(directory, level="all")
+    assert original_cache == {
+        str(p.relative_to(directory)): p.read_bytes()
+        for p in (directory / ".tf").rglob("*.tfx")
+    }
+    assert before_source == {
+        p.name: p.read_bytes() for p in directory.glob("*.tf") if p.is_file()
+    }
+    assert not tuple(tmp_path.glob(".tf-build-source-verify-*"))
+
+
+@pytest.mark.skipif(
+    os.name != "posix" or not hasattr(os, "mkfifo"),
+    reason="POSIX nonblocking FIFO semantics required",
+)
+def test_copy_fallback_rejects_fifo_swap_before_blocking_read(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    directory = _dataset(tmp_path)
+    victim = directory / "count.tf"
+    original_link = os.link
+    original_open = os.open
+    intercepted = False
+
+    def force_copy_for_count(
+        src: str | os.PathLike[str],
+        dst: str | os.PathLike[str],
+        *,
+        follow_symlinks: bool = True,
+    ) -> None:
+        if os.fspath(src) == os.fspath(victim):
+            raise OSError(errno.EXDEV, "simulated hardlink unavailable")
+        original_link(src, dst, follow_symlinks=follow_symlinks)
+
+    def intercepted_open(
+        path: str | os.PathLike[str],
+        flags: int,
+        mode: int = 0o777,
+        *,
+        dir_fd: int | None = None,
+    ) -> int:
+        nonlocal intercepted
+        if os.fspath(path) == os.fspath(victim):
+            # Fail before a FIFO is created if the fallback can block.
+            assert flags & os.O_NONBLOCK, "fallback source open must not block"
+            assert flags & os.O_NOFOLLOW, "fallback must not follow symlinks"
+            victim.unlink()
+            os.mkfifo(victim)
+            intercepted = True
+        return original_open(path, flags, mode, dir_fd=dir_fd)
+
+    def forbidden_unsafe_copy(*args: object, **kwargs: object) -> None:
+        raise AssertionError("shutil.copyfile can block on a replaced FIFO")
+
+    monkeypatch.setattr("tf_build.validate.os.link", force_copy_for_count)
+    monkeypatch.setattr("tf_build.validate.os.open", intercepted_open)
+    monkeypatch.setattr("tf_build.validate.shutil.copyfile", forbidden_unsafe_copy)
+
+    with pytest.raises(ArtifactValidationError, match="regular"):
+        validate_tf_artifact(directory, level="all")
+    assert intercepted
+    assert not tuple(tmp_path.glob(".tf-build-source-verify-*"))
 
 
 def test_symlink_artifact_and_tf_feature_are_rejected(tmp_path: Path) -> None:
