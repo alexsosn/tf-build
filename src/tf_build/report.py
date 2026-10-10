@@ -34,6 +34,8 @@ def _require_finite_number(value: int | float, label: str) -> None:
 
 def _validate_repository_locator(repository: str) -> None:
     _require_text(repository, "Git repository")
+    if any(ord(char) < 32 or ord(char) == 127 for char in repository):
+        raise ValueError("Git repository provenance must not contain control characters")
     lowered = repository.lower()
     path_parts = repository.replace("\\", "/").split("/")
     if (
