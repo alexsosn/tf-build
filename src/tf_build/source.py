@@ -75,12 +75,12 @@ def _run_git(source: Path, *args: str, timeout_seconds: float) -> str:
             f"Git command {operation!r} timed out after {timeout_seconds:g} seconds"
         ) from sanitized
     except subprocess.CalledProcessError as exc:
-        sanitized = subprocess.CalledProcessError(
+        sanitized_exit = subprocess.CalledProcessError(
             exc.returncode, ["git", operation]
         )
         raise GitSourceError(
             f"Git command {operation!r} failed with exit status {exc.returncode}"
-        ) from sanitized
+        ) from sanitized_exit
     except OSError:
         # A process-spawn exception can itself include untrusted path details.
         raise GitSourceError(f"Git command {operation!r} could not start") from None
