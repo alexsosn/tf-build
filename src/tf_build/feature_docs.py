@@ -7,7 +7,9 @@ or invents corpus-level semantic contracts for unsupported or absent features.
 from __future__ import annotations
 
 import html
+import os
 import re
+import stat
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -55,8 +57,17 @@ def _read_header(path: Path, module: str) -> FeatureHeader:
     metadata: dict[str, str] = {}
     separated = False
     first_line = True
+    flags = os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0)
+    if os.name == "posix":
+        nonblocking = getattr(os, "O_NONBLOCK", None)
+        nofollow = getattr(os, "O_NOFOLLOW", None)
+        if nonblocking is None or nofollow is None:
+            raise FeatureReferenceError("POSIX safe header open flags are unavailable")
+        flags |= nonblocking | nofollow
     try:
-        with path.open("r", encoding="utf-8") as stream:
+        with os.fdopen(os.open(path, flags), "r", encoding="utf-8") as stream:
+            if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+                raise FeatureReferenceError(f"{path}: TF feature is not a regular file")
             header_chars = 0
             while raw := stream.readline(_MAX_HEADER_LINE_CHARS + 1):
                 header_chars += len(raw)
