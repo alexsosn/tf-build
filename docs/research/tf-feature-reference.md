@@ -21,7 +21,7 @@ A pure rendering function can accept optional caller-supplied plain-text descrip
 
 - Fail on symlink candidate files, nonregular `*.tf` objects and malformed/ambiguous headers; ignore directories, including `.tf/`.
 - Read only until the first empty line, never the payload. Reject a missing blank separator to avoid silently treating body as metadata. Limit header inspection to 256 Ki characters total and 64 Ki characters per line, so a corrupted, unterminated header cannot induce an unbounded scan.
-- Reject conflicting primary markers and duplicate metadata keys. Preserve unknown keys and extra standalone markers instead of dropping them.
+- Require the primary `@node`, `@edge` or `@config` marker on the very first line, matching TF 13.1 `Data._readTf()`; reject out-of-order or conflicting primary markers and duplicate metadata keys. Preserve unknown keys and extra standalone markers instead of dropping them.
 - Escape caller/header prose as **text**, not executable HTML or uncontrolled Markdown links; no network fetches or body data loads.
 - Sort modules and feature names independent of directory creation/traversal order. Require safe module and filename identifiers because they become output page paths.
 - Outputs are computed in memory. Write/check/update policies belong to consumers; do not add a destructive on-disk docs synchronizer now.
