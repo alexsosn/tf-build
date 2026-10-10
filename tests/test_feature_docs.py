@@ -132,6 +132,21 @@ def test_malformed_regular_feature_header_fails(tmp_path: Path, data: str) -> No
         scan_tf_feature_headers({"core": directory})
 
 
+
+def test_missing_separator_cannot_scan_unbounded_header_text(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "core"
+    root.mkdir()
+    (root / "malformed.tf").write_text(
+        "@node\n@valueType=str\n"
+        + ("@extraKey=" + "x" * 1024 + "\n") * 512,
+        encoding="utf-8",
+    )
+    with pytest.raises(FeatureReferenceError, match="header exceeds"):
+        scan_tf_feature_headers({"core": root})
+
+
 def test_symlink_feature_fails_but_suffix_matching_directory_ignored(
     tmp_path: Path,
 ) -> None:
