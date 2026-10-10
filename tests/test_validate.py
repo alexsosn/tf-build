@@ -82,9 +82,9 @@ def test_validation_levels_use_real_tf_artifact(tmp_path: Path, level: Validatio
 
 def test_validation_does_not_change_source_tf_bytes(tmp_path: Path) -> None:
     directory = _dataset(tmp_path)
-    before = {p.name: p.read_bytes() for p in directory.glob("*.tf")}
+    before = {p.name: p.read_bytes() for p in directory.glob("*.tf") if p.is_file()}
     checked = validate_tf_artifact(directory, level="all")
-    after = {p.name: p.read_bytes() for p in directory.glob("*.tf")}
+    after = {p.name: p.read_bytes() for p in directory.glob("*.tf") if p.is_file()}
     assert checked.level == "all"
     assert after == before
 
