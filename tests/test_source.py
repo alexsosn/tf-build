@@ -200,7 +200,7 @@ def test_acquired_checkout_does_not_persist_credential_bearing_remote(
     assert _git(destination, "status", "--porcelain=v1") == ""
     assert _git(destination, "remote") == ""
     assert not (destination / ".git" / "FETCH_HEAD").exists()
-    assert (destination / "tracked.txt").read_text(encoding="utf-8") == "initial\\n"
+    assert (destination / "tracked.txt").read_text(encoding="utf-8") == "initial\n"
     for path in (destination / ".git").rglob("*"):
         if path.is_file():
             assert secret.encode("ascii") not in path.read_bytes(), str(path)
