@@ -8,7 +8,7 @@ from pathlib import Path
 from types import TracebackType
 from typing import Literal
 
-from ._atomic import publish_path_no_clobber
+from .publish import publish_path_no_clobber
 
 
 class BuildWorkspaceError(RuntimeError):
