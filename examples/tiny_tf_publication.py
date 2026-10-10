@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+from time import perf_counter
 
 from tf.fabric import Fabric  # type: ignore[import-untyped]
 
@@ -56,6 +57,7 @@ def publish_tiny_corpus(destination: str | Path) -> dict[str, str | int]:
     """Demonstrate a create-only checked publication with no generic runner API."""
     with BuildWorkspace(destination) as workspace:
         staging = workspace.path
+        started = perf_counter()
         _save_tiny_corpus(staging)
         validate_tf_artifact(
             staging,
@@ -69,10 +71,11 @@ def publish_tiny_corpus(destination: str | Path) -> dict[str, str | int]:
             ),
         )
 
+        elapsed = perf_counter() - started
         tf_files = [p for p in staging.glob("*.tf") if p.is_file()]
         report = BuildReport(
             producer=Producer("tf-build-tiny-demo", "1.0"),
-            phases=(PhaseTiming("materialize", 0.0),),
+            phases=(PhaseTiming("materialize", elapsed),),
             artifacts=(
                 ArtifactSummary(
                     "tf",
