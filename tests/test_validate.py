@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import errno
 from pathlib import Path
 
 import pytest
@@ -256,6 +257,55 @@ def test_valid_source_load_does_not_rewrite_caller_compiled_cache(
     assert before_source == {
         p.name: p.read_bytes() for p in directory.glob("*.tf") if p.is_file()
     }
+    assert not tuple(tmp_path.glob(".tf-build-source-verify-*"))
+
+
+@pytest.mark.skipif(
+    os.name != "posix" or not hasattr(os, "mkfifo"),
+    reason="POSIX nonblocking FIFO semantics required",
+)
+def test_copy_fallback_rejects_fifo_swap_before_blocking_read(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    directory = _dataset(tmp_path)
+    victim = directory / "count.tf"
+    original_link = os.link
+    original_open = os.open
+    intercepted = False
+
+    def force_copy_for_count(
+        src: str | os.PathLike[str],
+        dst: str | os.PathLike[str],
+        *,
+        follow_symlinks: bool = True,
+    ) -> None:
+        if os.fspath(src) == os.fspath(victim):
+            raise OSError(errno.EXDEV, "simulated hardlink unavailable")
+        original_link(src, dst, follow_symlinks=follow_symlinks)
+
+    def intercepted_open(
+        path: str | os.PathLike[str], flags: int, mode: int = 0o777
+    ) -> int:
+        nonlocal intercepted
+        if os.fspath(path) == os.fspath(victim):
+            # Fail before a FIFO is created if the fallback can block.
+            assert flags & os.O_NONBLOCK, "fallback source open must not block"
+            assert flags & os.O_NOFOLLOW, "fallback must not follow symlinks"
+            victim.unlink()
+            os.mkfifo(victim)
+            intercepted = True
+        return original_open(path, flags, mode)
+
+    def forbidden_unsafe_copy(*args: object, **kwargs: object) -> None:
+        raise AssertionError("shutil.copyfile can block on a replaced FIFO")
+
+    monkeypatch.setattr("tf_build.validate.os.link", force_copy_for_count)
+    monkeypatch.setattr("tf_build.validate.os.open", intercepted_open)
+    monkeypatch.setattr("tf_build.validate.shutil.copyfile", forbidden_unsafe_copy)
+
+    with pytest.raises(ArtifactValidationError, match="regular"):
+        validate_tf_artifact(directory, level="all")
+    assert intercepted
     assert not tuple(tmp_path.glob(".tf-build-source-verify-*"))
 
 
