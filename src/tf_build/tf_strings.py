@@ -7,7 +7,7 @@ values to the wrong nodes. No source text is ever rewritten by this module.
 
 from __future__ import annotations
 
-from collections.abc import AbstractSet, Mapping
+from collections.abc import Mapping, Set
 
 
 class TFStringSafetyError(ValueError):
@@ -38,7 +38,7 @@ def require_tf_safe_string(
 def preflight_tf_save_values(
     node_features: Mapping[str, Mapping[int, object]],
     edge_features: Mapping[
-        str, Mapping[int, Mapping[int, object] | AbstractSet[int]]
+        str, Mapping[int, Mapping[int, object] | Set[int]]
     ],
 ) -> None:
     """Check all string values in standard Fabric.save feature mappings.
