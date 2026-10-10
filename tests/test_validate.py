@@ -326,7 +326,7 @@ def test_readonly_parent_fallback_validates_real_tf_without_mutation(
     directory = _dataset(tmp_path)
     upstream = Fabric(locations=[str(directory)], silent="deep")
     assert upstream.load(("count",), silent="deep")
-    source_before = {p.name: p.read_bytes() for p in directory.glob("*.tf")}
+    source_before = {p.name: p.read_bytes() for p in directory.glob("*.tf") if p.is_file()}
     cache_before = {
         str(p.relative_to(directory)): p.read_bytes()
         for p in (directory / ".tf").rglob("*.tfx")
@@ -377,7 +377,7 @@ def test_readonly_parent_fallback_validates_real_tf_without_mutation(
     assert len(created) == 1
     assert not created[0].exists()
     assert copy_needed == (["count"] if force_copy else [])
-    assert source_before == {p.name: p.read_bytes() for p in directory.glob("*.tf")}
+    assert source_before == {p.name: p.read_bytes() for p in directory.glob("*.tf") if p.is_file()}
     assert cache_before == {
         str(p.relative_to(directory)): p.read_bytes()
         for p in (directory / ".tf").rglob("*.tfx")
@@ -389,7 +389,7 @@ def test_readonly_validation_fails_closed_if_system_temp_unavailable(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, second_errno: int
 ) -> None:
     directory = _dataset(tmp_path)
-    source_before = {p.name: p.read_bytes() for p in directory.glob("*.tf")}
+    source_before = {p.name: p.read_bytes() for p in directory.glob("*.tf") if p.is_file()}
     attempts: list[str] = []
 
     def deny_both(
@@ -403,7 +403,7 @@ def test_readonly_validation_fails_closed_if_system_temp_unavailable(
     with pytest.raises(ArtifactValidationError, match="validation directory"):
         validate_tf_artifact(directory, level="all")
     assert attempts == ["sibling", "system"]
-    assert source_before == {p.name: p.read_bytes() for p in directory.glob("*.tf")}
+    assert source_before == {p.name: p.read_bytes() for p in directory.glob("*.tf") if p.is_file()}
 
 
 def test_source_stage_full_disk_error_does_not_fallback(
