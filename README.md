@@ -175,6 +175,35 @@ validation never intentionally rewrites the original `.tf` feature files.
 `otext.tf` is optional upstream; request it explicitly when
 the consuming corpus requires it.
 
+## Generated Text-Fabric feature reference
+
+`tf_build.feature_docs` scans **emitted** Text-Fabric feature-file headers
+without loading corpus data, preserving unknown metadata and header markers:
+
+```python
+from tf_build.feature_docs import (
+    render_feature_reference,
+    scan_tf_feature_headers,
+)
+
+features = scan_tf_feature_headers({
+    "core": "/path/to/tf/core",
+    "provenance": "/path/to/tf/provenance",
+})
+pages = render_feature_reference(
+    features,
+    descriptions={("core", "lemma"): "Lexical headword"},
+)
+# pages["index.md"] and pages["core/lemma.md"] are deterministic Markdown.
+```
+
+The returned pages are **in memory**, leaving writing, drift detection and
+publishing to the consumer. Module-qualified pages permit repeated feature
+names across separately distributed TF modules. Plain-text semantic descriptions
+are caller-owned; the original `@description` and other header metadata remain
+visible. This does not infer supported-but-absent features or replace a clean
+artifact reload/validation gate.
+
 ## Development
 
 Python 3.11+ is the initial supported runtime. Text-Fabric 13.x is the initial compatibility target.
