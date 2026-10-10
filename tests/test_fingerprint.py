@@ -158,8 +158,6 @@ def test_fifo_swap_between_scandir_and_open_never_blocks(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """RED-first: require nonblocking flags before making the raced path a FIFO."""
-    from tf_build import fingerprint as fingerprint_module
-
     root = _root(tmp_path)
     victim = root / "otype.tf"
     victim.write_bytes(b"previously regular")
@@ -177,7 +175,7 @@ def test_fifo_swap_between_scandir_and_open_never_blocks(
             swapped = True
         return native_open(path, flags, mode)
 
-    monkeypatch.setattr(fingerprint_module.os, "open", intercepted_open)
+    monkeypatch.setattr("tf_build.fingerprint.os.open", intercepted_open)
 
     with pytest.raises(FingerprintError, match="non-regular"):
         fingerprint_tree(root)
