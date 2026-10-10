@@ -98,6 +98,30 @@ def _canonical_source(source: str | Path) -> Path:
     return path
 
 
+
+_SCP_REPOSITORY = re.compile(r"[^/]+@[^/:]+:")
+
+
+def _caller_local_repository(repository: str) -> str:
+    """Resolve a real local relative source before git -C changes its cwd.
+
+    URI and Git's scp-like transport syntax must never be interpreted as local
+    relative files, even if a coincidentally named directory exists.
+    """
+    if "://" in repository or _SCP_REPOSITORY.match(repository):
+        return repository
+    candidate = Path(repository)
+    if candidate.is_absolute():
+        return repository
+    if candidate.is_dir():
+        try:
+            return str(candidate.resolve(strict=True))
+        except (OSError, RuntimeError) as exc:
+            raise GitSourceError("could not resolve local Git repository") from exc
+    if repository.startswith(("./", "../")):
+        raise GitSourceError("relative local Git repository does not exist")
+    return repository
+
 def fetch_git_source(
     repository: str,
     destination: str | Path,
@@ -116,6 +140,8 @@ def fetch_git_source(
         raise GitSourceError(
             "Git repository locator must not be an option or contain control characters"
         )
+
+    fetch_repository = _caller_local_repository(repository)
 
     target = Path(destination)
     if target.is_symlink():
@@ -158,7 +184,7 @@ def fetch_git_source(
             "--depth",
             "1",
             "--",
-            repository,
+            fetch_repository,
             requested_revision,
             timeout_seconds=timeout,
         )

@@ -115,6 +115,14 @@ HTTPS/SSH/SCP URLs or a normal local path (prefix unusual dash-leading local
 pathnames with `./`). This avoids Git option parsing, not arbitrary Git
 transport, credential-helper or local-environment behavior.
 
+For **existing local directories**, relative repository locators such as
+`./upstream`, `../upstream` and `upstream` are resolved relative to the
+**caller's current working directory** before Git runs inside its private
+staging checkout. This also supports `./-unusual-name`. A missing explicit
+`./` or `../` local source fails before creating a destination. URI-style
+HTTPS/SSH and SCP-style Git locators are never rewritten as local paths;
+a non-existing bare name remains a Git locator.
+
 
 Acquisition fetches the pinned revision directly, without persisting the
 caller-supplied repository URL as a Git `origin` remote. The temporary
