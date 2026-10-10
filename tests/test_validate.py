@@ -237,6 +237,8 @@ def test_valid_source_load_does_not_rewrite_caller_compiled_cache(
     tmp_path: Path,
 ) -> None:
     directory = _dataset(tmp_path)
+    upstream = Fabric(locations=[str(directory)], silent="deep")
+    assert upstream.load(("count",), silent="deep")
     before_source = {
         p.name: p.read_bytes() for p in directory.glob("*.tf") if p.is_file()
     }
@@ -245,6 +247,7 @@ def test_valid_source_load_does_not_rewrite_caller_compiled_cache(
         str(p.relative_to(directory)): p.read_bytes()
         for p in (directory / ".tf").rglob("*.tfx")
     }
+    assert original_cache
     validate_tf_artifact(directory, level="all")
     assert original_cache == {
         str(p.relative_to(directory)): p.read_bytes()
