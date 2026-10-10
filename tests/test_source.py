@@ -347,6 +347,63 @@ def test_acquired_checkout_does_not_persist_credential_bearing_remote(
             assert secret.encode("ascii") not in path.read_bytes(), str(path)
 
 
+
+@pytest.mark.parametrize(
+    ("locator", "from_child"),
+    [
+        ("./repo-sha1", False),
+        ("repo-sha1", False),
+        ("../repo-sha1", True),
+        ("./-source-repo", False),
+    ],
+)
+def test_fetch_local_relative_git_repository_uses_caller_cwd(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    locator: str,
+    from_child: bool,
+) -> None:
+    source, revision = _make_repo(tmp_path)
+    if locator == "./-source-repo":
+        moved = tmp_path / "-source-repo"
+        source.rename(moved)
+        source = moved
+    caller = tmp_path / "caller" if from_child else tmp_path
+    caller.mkdir(exist_ok=True)
+    monkeypatch.chdir(caller)
+
+    native_run = subprocess.run
+    observed: list[list[str]] = []
+
+    def capture_fetch(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        command = args[0]
+        if isinstance(command, list) and "fetch" in command:
+            observed.append(command)
+        return cast(subprocess.CompletedProcess[str], native_run(*args, **kwargs))
+
+    monkeypatch.setattr("tf_build.source.subprocess.run", capture_fetch)
+    output = tmp_path / "relative-copy"
+    snapshot = fetch_git_source(locator, output, revision=revision)
+
+    assert snapshot.revision == revision
+    assert snapshot.path == output.resolve()
+    assert (snapshot.path / "tracked.txt").read_text(encoding="utf-8") == "initial\n"
+    assert len(observed) == 1
+    command = observed[0]
+    assert command[command.index("--") + 1] == str(source.resolve())
+    assert command[-1] == revision
+
+
+def test_missing_explicit_local_relative_repository_is_rejected_before_staging(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    destination = tmp_path / "not-created-parent" / "snapshot"
+    with pytest.raises(GitSourceError, match="relative local Git repository"):
+        fetch_git_source("./not-an-existing-git-repo", destination, revision="a" * 40)
+    assert not destination.parent.exists()
+
+
 def test_fetch_git_source_replaces_preexisting_empty_destination(tmp_path: Path) -> None:
     source, revision = _make_repo(tmp_path)
     destination = tmp_path / "acquired"
