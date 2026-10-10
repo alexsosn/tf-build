@@ -197,8 +197,10 @@ def test_cached_binary_never_masks_corrupted_same_mtime_raw_tf(
     tmp_path: Path, level: ValidationLevel
 ) -> None:
     directory = _dataset(tmp_path)
-    first = validate_tf_artifact(directory, level="all", require_otext=True)
-    assert first.level == "all"
+    # Populate a compiled cache using upstream TF itself, independently of
+    # tf-build's validator, so the regression remains valid after the fix.
+    upstream = Fabric(locations=[str(directory)], silent="deep")
+    assert upstream.load(("count",), silent="deep")
     cached = tuple((directory / ".tf").rglob("count.tfx"))
     assert cached, "real Text-Fabric exhaustive load must compile a binary count cache"
     cached_bytes = {p: p.read_bytes() for p in cached}
