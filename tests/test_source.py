@@ -3,7 +3,7 @@ from __future__ import annotations
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
@@ -319,7 +319,7 @@ def test_acquisition_timeout_cleans_staging_and_keeps_empty_destination(
 ) -> None:
     destination = tmp_path / "acquired"
     destination.mkdir()
-    native_run = source_module.subprocess.run
+    native_run = subprocess.run
     invoked = []
 
     def stalled_fetch(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess[str]:
@@ -329,9 +329,9 @@ def test_acquisition_timeout_cleans_staging_and_keeps_empty_destination(
             assert kwargs.get("timeout") == 2.5
             invoked.append(tuple(command))
             raise subprocess.TimeoutExpired(command, 2.5)
-        return native_run(*args, **kwargs)
+        return cast(subprocess.CompletedProcess[str], native_run(*args, **kwargs))
 
-    monkeypatch.setattr(source_module.subprocess, "run", stalled_fetch)
+    monkeypatch.setattr("tf_build.source.subprocess.run", stalled_fetch)
     with pytest.raises(GitSourceError, match="timed out") as caught:
         fetch_git_source(
             "https://secret-token@example.invalid/private.git",
@@ -360,7 +360,7 @@ def test_verification_timeout_is_enforced_and_avoids_argument_disclosure(
         commands.append(tuple(command))
         raise subprocess.TimeoutExpired(command, 3.75)
 
-    monkeypatch.setattr(source_module.subprocess, "run", stalled_inspection)
+    monkeypatch.setattr("tf_build.source.subprocess.run", stalled_inspection)
     with pytest.raises(GitSourceError, match="timed out") as caught:
         verify_git_source(repo, timeout_seconds=3.75)
     assert isinstance(caught.value.__cause__, subprocess.TimeoutExpired)
