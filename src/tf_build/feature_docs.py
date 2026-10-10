@@ -189,7 +189,9 @@ def render_feature_reference(
             page.extend([f"**Value type:** {_safe_text(record.value_type)}", ""])
         if record.kind == "edge":
             page.extend([f"**Edge values:** {'yes' if record.edge_values else 'no'}", ""])
-        page.extend(["## Description", "", _safe_text(description) if description else "_Not declared._", ""])
+        page.extend(
+            ["## Description", "", _safe_text(description) if description else "_Not declared._", ""]
+        )
         page.extend(["## Shipped header metadata", ""])
         if record.metadata:
             for key, value in record.metadata:
