@@ -71,6 +71,10 @@ def _file_features(directory: Path, *, require_otext: bool) -> tuple[str, ...]:
     for path in directory.glob("*.tf"):
         if path.is_symlink():
             raise ArtifactValidationError(f"TF feature file is a symlink: {path}")
+        if path.is_dir():
+            # Text-Fabric's own compiled cache lives in .tf/; other matching
+            # directories are likewise not feature files.
+            continue
         if not path.is_file():
             raise ArtifactValidationError(f"TF feature path is not a regular file: {path}")
         features.append(path.stem)
