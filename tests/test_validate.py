@@ -284,7 +284,11 @@ def test_copy_fallback_rejects_fifo_swap_before_blocking_read(
         original_link(src, dst, follow_symlinks=follow_symlinks)
 
     def intercepted_open(
-        path: str | os.PathLike[str], flags: int, mode: int = 0o777
+        path: str | os.PathLike[str],
+        flags: int,
+        mode: int = 0o777,
+        *,
+        dir_fd: int | None = None,
     ) -> int:
         nonlocal intercepted
         if os.fspath(path) == os.fspath(victim):
@@ -294,7 +298,7 @@ def test_copy_fallback_rejects_fifo_swap_before_blocking_read(
             victim.unlink()
             os.mkfifo(victim)
             intercepted = True
-        return original_open(path, flags, mode)
+        return original_open(path, flags, mode, dir_fd=dir_fd)
 
     def forbidden_unsafe_copy(*args: object, **kwargs: object) -> None:
         raise AssertionError("shutil.copyfile can block on a replaced FIFO")
