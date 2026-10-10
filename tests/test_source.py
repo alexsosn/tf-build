@@ -378,7 +378,7 @@ def test_fetch_and_verify_accept_custom_timeout_against_real_local_git(
         str(source), tmp_path / "copy", revision=revision, timeout_seconds=10.0
     )
     assert acquired.revision == revision
-    assert (acquired.path / "tracked.txt").read_text(encoding="utf-8") == "initial\\n"
+    assert (acquired.path / "tracked.txt").read_text(encoding="utf-8") == "initial\n"
 
 
 def test_fetch_git_source_does_not_clobber_destination_created_before_publish(
