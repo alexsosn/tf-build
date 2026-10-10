@@ -136,6 +136,29 @@ def test_opt_in_git_verification_rejects_ignored_nonversioned_inputs(
     assert strict.revision == revision
 
 
+
+def test_strict_ignored_inventory_skips_empty_ignored_directories(
+    tmp_path: Path,
+) -> None:
+    repo, _ = _make_repo(tmp_path)
+    (repo / ".gitignore").write_text("raw/\n", encoding="utf-8")
+    _git(repo, "add", ".gitignore")
+    _git(repo, "commit", "--quiet", "-m", "exclude local data directory")
+    revision = _git(repo, "rev-parse", "HEAD")
+    (repo / "raw").mkdir()
+
+    # Git's --directory without --no-empty-directory lists this empty folder.
+    assert "raw/" in _git(
+        repo, "ls-files", "--others", "--ignored", "--exclude-standard", "--directory"
+    )
+    assert _git(
+        repo, "ls-files", "--others", "--ignored", "--exclude-standard",
+        "--directory", "--no-empty-directory",
+    ) == ""
+    checked = verify_git_source(repo, reject_ignored_files=True)
+    assert checked.revision == revision
+
+
 def test_strict_ignored_inventory_is_repository_wide_not_subdirectory_only(
     tmp_path: Path,
 ) -> None:
