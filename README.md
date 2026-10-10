@@ -118,6 +118,31 @@ explicit manifest file are excluded; all other regular files including licenses
 and documentation contribute. Symlinks/nonregular entries fail closed.
 Fingerprinting a concurrently changing directory is not an atomic snapshot.
 
+## Agora materializer output helpers
+
+`tf_build.agora` provides small preflight/path helpers for plugins running
+inside Agora's existing private, empty output directory:
+
+```python
+from tf_build.agora import (
+    agora_output_path,
+    optional_source_revision,
+    prepare_agora_output,
+)
+
+root = prepare_agora_output("/agora-output/output")
+tf_child = agora_output_path(root, "tf")
+revision = optional_source_revision("")  # None for user-local/archive input
+```
+
+Both direct TF output at `root` and nested TF output at `tf_child` are
+supported. The optional source revision accepts only complete immutable Git
+IDs when present. `agora-materialization.json` is reserved to Agora itself.
+
+Agora, not tf-build, owns acquisition, sandbox/network enforcement, output
+validation and final promotion. These helpers never create the host root,
+execute conversion code or publish the user's destination.
+
 ## Text-Fabric artifact validation
 
 Use `tf_build.validate` to verify an emitted dataset independently of its
