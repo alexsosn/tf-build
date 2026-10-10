@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import traceback
@@ -157,6 +158,29 @@ def test_strict_ignored_inventory_skips_empty_ignored_directories(
     ) == ""
     checked = verify_git_source(repo, reject_ignored_files=True)
     assert checked.revision == revision
+
+
+
+@pytest.mark.skipif(
+    os.name == "nt", reason="Windows filesystems disallow whitespace-only filenames"
+)
+def test_strict_ignored_inventory_detects_whitespace_only_filenames(
+    tmp_path: Path,
+) -> None:
+    repo, _ = _make_repo(tmp_path)
+    (repo / ".gitignore").write_text("*\n", encoding="utf-8")
+    _git(repo, "add", "-f", ".gitignore")
+    _git(repo, "commit", "--quiet", "-m", "ignore all local data")
+    ignored_file = repo / " "
+    ignored_file.write_text("nonversioned input\n", encoding="utf-8")
+
+    # The existing _run_git/.strip() collapses Git's " \n" output to "".
+    assert _git(
+        repo, "ls-files", "--others", "--ignored", "--exclude-standard",
+        "--directory", "--no-empty-directory",
+    ) == ""
+    with pytest.raises(GitSourceError, match="ignored"):
+        verify_git_source(repo, reject_ignored_files=True)
 
 
 def test_strict_ignored_inventory_is_repository_wide_not_subdirectory_only(
