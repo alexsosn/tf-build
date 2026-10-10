@@ -278,6 +278,7 @@ def verify_git_source(
             "--ignored",
             "--exclude-standard",
             "--directory",
+            "--no-empty-directory",
             timeout_seconds=timeout,
         )
         if ignored:
