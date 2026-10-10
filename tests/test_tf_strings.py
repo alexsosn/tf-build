@@ -82,14 +82,16 @@ def test_scalar_preflight_preserves_supported_strings_exactly(value: str) -> Non
 
 
 def test_aggregate_preflight_inspects_node_and_valued_edge_without_mutation() -> None:
+    word_text = {1: "alpha\nbeta", 2: "gamma"}
+    valued_edges = {3: {1: "edge\tvalue", 2: "other"}}
     nodes = {
         "otype": {1: "word", 2: "word", 3: "sentence"},
-        "text": {1: "alpha\nbeta", 2: "gamma"},
+        "text": word_text,
         "count": {1: 7, 2: None},
     }
     edges = {
         "oslots": {3: {1, 2}},
-        "link": {3: {1: "edge\tvalue", 2: "other"}},
+        "link": valued_edges,
     }
     before_nodes = deepcopy(nodes)
     before_edges = deepcopy(edges)
@@ -97,13 +99,13 @@ def test_aggregate_preflight_inspects_node_and_valued_edge_without_mutation() ->
     assert nodes == before_nodes
     assert edges == before_edges
 
-    nodes["text"][2] = "private\rnewline"
+    word_text[2] = "private\rnewline"
     with pytest.raises(TFStringSafetyError, match="text") as caught:
         preflight_tf_save_values(nodes, edges)
     assert "private" not in str(caught.value)
-    nodes["text"][2] = "gamma"
+    word_text[2] = "gamma"
 
-    edges["link"][3][2] = "edge\runsafe"
+    valued_edges[3][2] = "edge\runsafe"
     with pytest.raises(TFStringSafetyError) as caught:
         preflight_tf_save_values(nodes, edges)
     assert "link" in str(caught.value)
