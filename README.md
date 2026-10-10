@@ -170,9 +170,15 @@ print(result.level, result.feature_names)
   expensive release/integration gate for large corpora.
 
 Slot/node ontology and source-semantic checks remain the corpus project's
-responsibility. Runtime TF loading can create derived `.tf/` compiled caches;
-validation never intentionally rewrites the original `.tf` feature files.
-`otext.tf` is optional upstream; request it explicitly when
+responsibility. For `selected` and `all`, validation loads a private,
+source-only view of the emitted `.tf` files so existing Text-Fabric `.tf/*.tfx`
+binary caches cannot hide corrupted raw feature bodies. The view prefers
+hardlinks (no duplicate source-byte storage) with a file-copy fallback, and
+cleans up derived caches on exit. The artifact's own `.tf` files and compiled
+caches are not intentionally changed; large datasets may require extra
+temporary storage or I/O if linking is unavailable. This is not an atomic
+snapshot under concurrent source mutation. `metadata` stays a cheap header
+check. `otext.tf` is optional upstream; request it explicitly when
 the consuming corpus requires it.
 
 ## Generated Text-Fabric feature reference
