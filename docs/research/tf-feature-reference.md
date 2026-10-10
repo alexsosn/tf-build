@@ -20,7 +20,7 @@ A pure rendering function can accept optional caller-supplied plain-text descrip
 ## Safety and determinism
 
 - Fail on symlink candidate files, nonregular `*.tf` objects and malformed/ambiguous headers; ignore directories, including `.tf/`.
-- Read only until the first empty line, never the payload. Reject a missing blank separator to avoid silently treating body as metadata.
+- Read only until the first empty line, never the payload. Reject a missing blank separator to avoid silently treating body as metadata. Limit header inspection to 256 Ki characters total and 64 Ki characters per line, so a corrupted, unterminated header cannot induce an unbounded scan.
 - Reject conflicting primary markers and duplicate metadata keys. Preserve unknown keys and extra standalone markers instead of dropping them.
 - Escape caller/header prose as **text**, not executable HTML or uncontrolled Markdown links; no network fetches or body data loads.
 - Sort modules and feature names independent of directory creation/traversal order. Require safe module and filename identifiers because they become output page paths.
