@@ -40,6 +40,9 @@ def test_runnable_example_publishes_real_validated_artifact(
     report = json.loads((published / "run-report.json").read_text(encoding="utf-8"))
     assert report["schema"] == 1
     assert report["producer"]["name"] == "tf-build-tiny-demo"
+    assert len(report["phases"]) == 1
+    assert report["phases"][0]["name"] == "materialize"
+    assert report["phases"][0]["seconds"] > 0.0
     assert "digest" not in report
     assert "fingerprint" not in report
 
