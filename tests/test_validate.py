@@ -89,6 +89,22 @@ def test_validation_does_not_change_source_tf_bytes(tmp_path: Path) -> None:
     assert after == before
 
 
+
+def test_revalidation_ignores_compiled_cache_and_other_tf_directories(
+    tmp_path: Path,
+) -> None:
+    directory = _dataset(tmp_path)
+    first = validate_tf_artifact(directory, level="selected")
+    assert first.level == "selected"
+    # Text-Fabric may create .tf/ caches during load; an extra suffix-matching
+    # directory is also not a regular TF feature file.
+    (directory / ".tf").mkdir(exist_ok=True)
+    (directory / "scratch.tf").mkdir()
+    second = validate_tf_artifact(directory, level="all")
+    assert second.level == "all"
+    assert ".tf" not in second.feature_names
+    assert "scratch" not in second.feature_names
+
 def test_missing_or_incorrect_required_features_are_rejected(tmp_path: Path) -> None:
     directory = _dataset(tmp_path)
     cases = (
