@@ -81,6 +81,25 @@ snapshot = fetch_git_source(
 
 Acquisition uses a sibling staging directory, verifies the detached checkout before publication, and supports both SHA-1 and SHA-256 Git repositories. Conversion code should still receive local inputs and remain network-free.
 
+Git inspection and acquisition commands have a generous **30-minute per-command**
+timeout by default, not an overall materialization deadline. Callers with
+different transport requirements can override it:
+
+```python
+snapshot = fetch_git_source(
+    "https://github.com/example/upstream.git",
+    "/path/to/fresh/source",
+    revision="0123456789abcdef0123456789abcdef01234567",
+    timeout_seconds=900.0,
+)
+```
+
+`verify_git_source(..., timeout_seconds=900.0)` accepts the same positive
+finite value. Timeouts raise `GitSourceError` and unpublished acquisition
+staging is cleaned. A direct Git command timeout does not necessarily stop
+transport subprocess grandchildren or impose a global build deadline.
+
+
 ## Safe build workspace
 
 Generated artifacts can be built and validated in a fresh sibling staging directory and published explicitly:

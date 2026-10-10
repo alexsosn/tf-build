@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+import traceback
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
@@ -292,6 +293,137 @@ def test_fetch_git_source_failure_preserves_preexisting_empty_destination(
     assert not any(destination.iterdir())
     assert not tuple(tmp_path.glob(".acquired.tf-build-*"))
 
+
+@pytest.mark.parametrize(
+    "seconds",
+    [0.0, -1.0, float("nan"), float("inf"), float("-inf"), True, "600"],
+)
+def test_invalid_git_timeout_fails_before_source_or_destination_mutation(
+    tmp_path: Path, seconds: float
+) -> None:
+    destination = tmp_path / "acquired"
+    with pytest.raises(ValueError, match="timeout"):
+        fetch_git_source(
+            "bad-credential:secret@example.invalid/repo",
+            destination,
+            revision="a" * 40,
+            timeout_seconds=seconds,
+        )
+    assert not destination.exists()
+    assert not tuple(tmp_path.glob(".acquired.tf-build-*"))
+    with pytest.raises(ValueError, match="timeout"):
+        verify_git_source(tmp_path / "missing", timeout_seconds=seconds)
+
+
+def test_acquisition_timeout_cleans_staging_and_keeps_empty_destination(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    destination = tmp_path / "acquired"
+    destination.mkdir()
+    native_run = subprocess.run
+    invoked = []
+
+    def stalled_fetch(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        command = args[0]
+        assert isinstance(command, list)
+        if "fetch" in command:
+            assert kwargs.get("timeout") == 2.5
+            invoked.append(tuple(command))
+            raise subprocess.TimeoutExpired(command, 2.5)
+        return cast(subprocess.CompletedProcess[str], native_run(*args, **kwargs))
+
+    monkeypatch.setattr("tf_build.source.subprocess.run", stalled_fetch)
+    with pytest.raises(GitSourceError, match="timed out") as caught:
+        fetch_git_source(
+            "https://secret-token@example.invalid/private.git",
+            destination,
+            revision="a" * 40,
+            timeout_seconds=2.5,
+        )
+    assert isinstance(caught.value.__cause__, subprocess.TimeoutExpired)
+    assert "secret-token" not in str(caught.value)
+    assert invoked
+    assert destination.is_dir()
+    assert not any(destination.iterdir())
+    assert not tuple(tmp_path.glob(".acquired.tf-build-*"))
+
+
+def test_verification_timeout_is_enforced_and_avoids_argument_disclosure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    commands = []
+
+    def stalled_inspection(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        command = args[0]
+        assert kwargs.get("timeout") == 3.75
+        commands.append(tuple(command))
+        raise subprocess.TimeoutExpired(command, 3.75)
+
+    monkeypatch.setattr("tf_build.source.subprocess.run", stalled_inspection)
+    with pytest.raises(GitSourceError, match="timed out") as caught:
+        verify_git_source(repo, timeout_seconds=3.75)
+    assert isinstance(caught.value.__cause__, subprocess.TimeoutExpired)
+    assert commands and "rev-parse" in commands[0]
+    assert "3.75" in str(caught.value)
+
+
+def test_fetch_and_verify_accept_custom_timeout_against_real_local_git(
+    tmp_path: Path,
+) -> None:
+    source, revision = _make_repo(tmp_path)
+    verified = verify_git_source(source, expected_revision=revision, timeout_seconds=10.0)
+    assert verified.revision == revision
+    acquired = fetch_git_source(
+        str(source), tmp_path / "copy", revision=revision, timeout_seconds=10.0
+    )
+    assert acquired.revision == revision
+    assert (acquired.path / "tracked.txt").read_text(encoding="utf-8") == "initial\n"
+
+
+
+@pytest.mark.parametrize("mode", ["timeout", "exit", "oserror"])
+def test_git_remote_failures_redact_credential_locators_in_formatted_tracebacks(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mode: str
+) -> None:
+    secret = "SECRET_CREDENTIAL"
+    repository = f"https://user:{secret}@example.invalid/private.git"
+    destination = tmp_path / "acquired"
+    destination.mkdir()
+    native_run = subprocess.run
+
+    def failed_remote(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        command = args[0]
+        assert isinstance(command, list)
+        if "remote" in command:
+            if mode == "timeout":
+                raise subprocess.TimeoutExpired(command, 2.0, stderr=f"{secret} stderr")
+            if mode == "exit":
+                raise subprocess.CalledProcessError(
+                    128, command, stderr=f"{secret} stderr"
+                )
+            raise OSError(f"{secret} transport subprocess failure")
+        return cast(subprocess.CompletedProcess[str], native_run(*args, **kwargs))
+
+    monkeypatch.setattr("tf_build.source.subprocess.run", failed_remote)
+    with pytest.raises(GitSourceError) as caught:
+        fetch_git_source(repository, destination, revision="a" * 40, timeout_seconds=2.0)
+
+    error = caught.value
+    assert secret not in str(error)
+    assert secret not in "".join(traceback.format_exception(error))
+    if mode == "timeout":
+        assert isinstance(error.__cause__, subprocess.TimeoutExpired)
+        assert error.__cause__.timeout == 2.0
+    if mode == "exit":
+        assert isinstance(error.__cause__, subprocess.CalledProcessError)
+        assert error.__cause__.returncode == 128
+    assert destination.is_dir()
+    assert not any(destination.iterdir())
+    assert not tuple(tmp_path.glob(".acquired.tf-build-*"))
+
+
 def test_fetch_git_source_does_not_clobber_destination_created_before_publish(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -303,10 +435,12 @@ def test_fetch_git_source_does_not_clobber_destination_created_before_publish(
         source_path: str | Path,
         *,
         expected_revision: str | None = None,
+        timeout_seconds: float = 1800.0,
     ) -> source_module.SourceSnapshot:
         snapshot = real_verify(
             source_path,
             expected_revision=expected_revision,
+            timeout_seconds=timeout_seconds,
         )
         destination.mkdir()
         return snapshot

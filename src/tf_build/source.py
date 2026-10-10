@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import re
 import shutil
 import subprocess
@@ -38,19 +39,51 @@ def validate_git_revision(revision: str) -> str:
     return revision.lower()
 
 
-def _run_git(source: Path, *args: str) -> str:
+_DEFAULT_GIT_TIMEOUT_SECONDS = 1800.0
+
+
+def _validated_timeout(seconds: float) -> float:
+    if isinstance(seconds, bool) or not isinstance(seconds, (float, int)):
+        raise ValueError("Git command timeout must be a positive finite number of seconds")
+    try:
+        timeout = float(seconds)
+    except OverflowError as exc:
+        raise ValueError("Git command timeout must be finite") from exc
+    if not math.isfinite(timeout) or timeout <= 0:
+        raise ValueError("Git command timeout must be a positive finite number of seconds")
+    return timeout
+
+
+def _run_git(source: Path, *args: str, timeout_seconds: float) -> str:
+    # Only the fixed operation is safe to report; later arguments can contain
+    # caller-supplied repository credentials and URLs.
+    operation = args[0] if args else "inspection"
     try:
         result = subprocess.run(
             ["git", "-C", str(source), *args],
             check=True,
             capture_output=True,
             text=True,
+            timeout=timeout_seconds,
         )
-    except (OSError, subprocess.CalledProcessError) as exc:
-        command = " ".join(args)
+    except subprocess.TimeoutExpired as exc:
+        # Formatting a chained TimeoutExpired normally prints its raw command
+        # array. Construct a sanitized cause to preserve the exception type
+        # and duration without leaking the repository locator.
+        sanitized = subprocess.TimeoutExpired(["git", operation], exc.timeout)
         raise GitSourceError(
-            f"Git inspection failed while running {command!r} for {source}"
-        ) from exc
+            f"Git command {operation!r} timed out after {timeout_seconds:g} seconds"
+        ) from sanitized
+    except subprocess.CalledProcessError as exc:
+        sanitized_exit = subprocess.CalledProcessError(
+            exc.returncode, ["git", operation]
+        )
+        raise GitSourceError(
+            f"Git command {operation!r} failed with exit status {exc.returncode}"
+        ) from sanitized_exit
+    except OSError:
+        # A process-spawn exception can itself include untrusted path details.
+        raise GitSourceError(f"Git command {operation!r} could not start") from None
     return result.stdout.strip()
 
 
@@ -70,8 +103,10 @@ def fetch_git_source(
     destination: str | Path,
     *,
     revision: str,
+    timeout_seconds: float = _DEFAULT_GIT_TIMEOUT_SECONDS,
 ) -> SourceSnapshot:
     """Acquire one immutable Git commit and publish a verified clean checkout."""
+    timeout = _validated_timeout(timeout_seconds)
     requested_revision = validate_git_revision(revision)
     if not isinstance(repository, str) or not repository.strip():
         raise GitSourceError("Git repository locator must be a non-empty string")
@@ -108,8 +143,8 @@ def fetch_git_source(
         init_args = ["init", "--quiet"]
         if len(requested_revision) == 64:
             init_args.append("--object-format=sha256")
-        _run_git(staging, *init_args)
-        _run_git(staging, "remote", "add", "origin", repository)
+        _run_git(staging, *init_args, timeout_seconds=timeout)
+        _run_git(staging, "remote", "add", "origin", repository, timeout_seconds=timeout)
         _run_git(
             staging,
             "fetch",
@@ -117,12 +152,16 @@ def fetch_git_source(
             "1",
             "origin",
             requested_revision,
+            timeout_seconds=timeout,
         )
-        _run_git(staging, "checkout", "--detach", "FETCH_HEAD")
+        _run_git(
+            staging, "checkout", "--detach", "FETCH_HEAD", timeout_seconds=timeout
+        )
 
         snapshot = verify_git_source(
             staging,
             expected_revision=requested_revision,
+            timeout_seconds=timeout,
         )
 
         if target_preexisted:
@@ -162,8 +201,10 @@ def verify_git_source(
     source: str | Path,
     *,
     expected_revision: str | None = None,
+    timeout_seconds: float = _DEFAULT_GIT_TIMEOUT_SECONDS,
 ) -> SourceSnapshot:
     """Verify a clean local Git working tree without contacting any remote."""
+    timeout = _validated_timeout(timeout_seconds)
     expected = (
         None
         if expected_revision is None
@@ -171,11 +212,15 @@ def verify_git_source(
     )
     path = _canonical_source(source)
 
-    inside_work_tree = _run_git(path, "rev-parse", "--is-inside-work-tree")
+    inside_work_tree = _run_git(
+        path, "rev-parse", "--is-inside-work-tree", timeout_seconds=timeout
+    )
     if inside_work_tree != "true":
         raise GitSourceError(f"source is not a Git working tree: {path}")
 
-    root_text = _run_git(path, "rev-parse", "--show-toplevel")
+    root_text = _run_git(
+        path, "rev-parse", "--show-toplevel", timeout_seconds=timeout
+    )
     try:
         repository_root = Path(root_text).resolve(strict=True)
     except (OSError, RuntimeError) as exc:
@@ -189,7 +234,9 @@ def verify_git_source(
         )
 
     revision = validate_git_revision(
-        _run_git(path, "rev-parse", "--verify", "HEAD^{commit}")
+        _run_git(
+            path, "rev-parse", "--verify", "HEAD^{commit}", timeout_seconds=timeout
+        )
     )
     if expected is not None and revision != expected:
         raise GitSourceError(
@@ -202,6 +249,7 @@ def verify_git_source(
         "--porcelain=v1",
         "--untracked-files=all",
         "--ignore-submodules=none",
+        timeout_seconds=timeout,
     )
     if status:
         raise GitSourceError(f"Git working tree is dirty: {repository_root}")
