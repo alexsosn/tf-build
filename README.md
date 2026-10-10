@@ -204,6 +204,26 @@ are caller-owned; the original `@description` and other header metadata remain
 visible. This does not infer supported-but-absent features or replace a clean
 artifact reload/validation gate.
 
+## Executable Text-Fabric publication smoke
+
+The repository includes a minimal **real Text-Fabric** consumer showing how
+to compose existing primitives without a new universal build runner:
+
+```bash
+python examples/tiny_tf_publication.py /tmp/new-tiny-tf
+```
+
+The destination must not exist. The script serializes word slots and a valued
+edge using `Fabric.save`, independently reloads every TF feature, emits a
+caller-owned operational `run-report.json`, fingerprints shipped raw bytes,
+publishes with `BuildWorkspace`, and verifies the published fingerprint.
+Text-Fabric's compiled `.tf/` cache is not part of the source-byte identity.
+Re-running against the same destination refuses to overwrite it.
+
+It is a toy corpus, not an Agora host integration or a scholarly validation
+claim; see `tests/test_publication_smoke.py` for the fail-closed corruption
+and non-clobber checks.
+
 ## Development
 
 Python 3.11+ is the initial supported runtime. Text-Fabric 13.x is the initial compatibility target.
