@@ -150,6 +150,40 @@ def test_nonregular_entries_are_rejected(tmp_path: Path) -> None:
         fingerprint_tree(root)
 
 
+@pytest.mark.skipif(
+    os.name != "posix" or not hasattr(os, "mkfifo"),
+    reason="POSIX FIFO semantics required",
+)
+def test_fifo_swap_between_scandir_and_open_never_blocks(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """RED-first: require nonblocking flags before making the raced path a FIFO."""
+    from tf_build import fingerprint as fingerprint_module
+
+    root = _root(tmp_path)
+    victim = root / "otype.tf"
+    victim.write_bytes(b"previously regular")
+    native_open = os.open
+    swapped = False
+
+    def intercepted_open(path: str | os.PathLike[str], flags: int, mode: int = 0o777) -> int:
+        nonlocal swapped
+        if Path(path) == victim:
+            # This assertion makes the old version fail promptly: never create
+            # a FIFO and then invoke a blocking open as part of a RED test.
+            assert flags & os.O_NONBLOCK, "regular-file open must be nonblocking"
+            victim.unlink()
+            os.mkfifo(victim)
+            swapped = True
+        return native_open(path, flags, mode)
+
+    monkeypatch.setattr(fingerprint_module.os, "open", intercepted_open)
+
+    with pytest.raises(FingerprintError, match="non-regular"):
+        fingerprint_tree(root)
+    assert swapped
+
+
 @pytest.mark.parametrize(
     "path",
     ["", ".", "..", "../MANIFEST", "/tmp/MANIFEST", "C:/MANIFEST",
