@@ -93,7 +93,14 @@ def _files(root: Path, manifest: str | None) -> list[tuple[str, Path]]:
 
 def _file_identity(name: str, path: Path) -> FileFingerprint:
     # O_NOFOLLOW protects the final path component on supporting platforms.
+    # A regular file can be swapped for a FIFO after scandir; on POSIX a
+    # blocking read-only open would hang before fstat could reject the FIFO.
     flags = os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0)
+    if os.name == "posix":
+        nonblocking = getattr(os, "O_NONBLOCK", None)
+        if nonblocking is None:
+            raise FingerprintError("POSIX nonblocking file open is unavailable")
+        flags |= nonblocking
     try:
         fd = os.open(path, flags)
     except OSError as exc:
