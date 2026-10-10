@@ -6,6 +6,7 @@ feature files are never intentionally rewritten by this validator.
 
 from __future__ import annotations
 
+import errno
 import os
 import shutil
 import stat
@@ -188,14 +189,23 @@ def _uncached_source_view(
     Fabric.load only reads the .tf files; it writes derived caches in the
     temporary location, never in the caller's artifact.
     """
+    prefix = ".tf-build-source-verify-"
     try:
-        stage = tempfile.TemporaryDirectory(
-            prefix=".tf-build-source-verify-", dir=directory.parent
-        )
+        stage = tempfile.TemporaryDirectory(prefix=prefix, dir=directory.parent)
     except OSError as exc:
-        raise ArtifactValidationError(
-            "could not create isolated Text-Fabric validation directory"
-        ) from exc
+        # A readable corpus may be installed under a nonwritable parent.
+        # Retry only for permission/read-only filesystem failures, never for
+        # unrelated path races or out-of-space errors.
+        if exc.errno not in (errno.EACCES, errno.EPERM, errno.EROFS):
+            raise ArtifactValidationError(
+                "could not create isolated Text-Fabric validation directory"
+            ) from exc
+        try:
+            stage = tempfile.TemporaryDirectory(prefix=prefix)
+        except OSError as fallback_error:
+            raise ArtifactValidationError(
+                "could not create isolated Text-Fabric validation directory"
+            ) from fallback_error
 
     with stage as temp_name:
         temp_path = Path(temp_name)
