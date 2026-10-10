@@ -49,6 +49,14 @@ print(report.to_json())
 
 Artifact paths are portable logical POSIX-relative paths. Reports deliberately contain no file digests or release-certification claims; deterministic artifact identity is a separate layer.
 
+Git source provenance is a **public identifier**, not the credential-bearing URL
+used for fetching. `GitSourceProvenance` accepts clean HTTPS and conventional
+SSH/SCP-style repository locators but rejects HTTP(S) userinfo, URL passwords,
+queries and fragments. Supply a separate sanitized repository locator when a
+private source must be acquired with credentials; do not embed tokens in
+exported build reports.
+
+
 ## Git source verification
 
 The first reusable primitive verifies an already-local clean Git working tree without contacting a remote:
