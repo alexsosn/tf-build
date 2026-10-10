@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
@@ -160,6 +161,70 @@ def test_symlink_feature_fails_but_suffix_matching_directory_ignored(
     with pytest.raises(FeatureReferenceError, match="symlink"):
         scan_tf_feature_headers({"core": directory})
     assert outside.is_file()
+
+
+
+@pytest.mark.skipif(
+    os.name != "posix" or not hasattr(os, "mkfifo"),
+    reason="POSIX FIFO and no-follow semantics required",
+)
+def test_regular_header_swapped_for_fifo_does_not_block(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tmp_path / "core"
+    root.mkdir()
+    feature = root / "word.tf"
+    feature.write_text("@node\n@valueType=str\n\n1\tone\n", encoding="utf-8")
+    native_open = os.open
+    swapped = False
+
+    def intercepted_open(path: str | os.PathLike[str], flags: int, mode: int = 0o777) -> int:
+        nonlocal swapped
+        if os.fspath(path) == os.fspath(feature):
+            # RED-safe: fail before creating a FIFO if new flags are absent.
+            assert flags & os.O_NONBLOCK, "FIFO feature open would block"
+            assert flags & os.O_NOFOLLOW, "symlink replacement would be followed"
+            feature.unlink()
+            os.mkfifo(feature)
+            swapped = True
+        return native_open(path, flags, mode)
+
+    monkeypatch.setattr(os, "open", intercepted_open)
+    with pytest.raises(FeatureReferenceError, match="regular"):
+        scan_tf_feature_headers({"core": root})
+    assert swapped
+
+
+@pytest.mark.skipif(
+    os.name != "posix" or not hasattr(os, "O_NOFOLLOW"),
+    reason="POSIX no-follow semantics required",
+)
+def test_regular_header_swapped_for_symlink_is_not_followed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tmp_path / "core"
+    root.mkdir()
+    feature = root / "word.tf"
+    feature.write_text("@node\n@valueType=str\n\n1\tone\n", encoding="utf-8")
+    outside = tmp_path / "outside.tf"
+    outside.write_text("@node\n@valueType=str\n\n1\tsecret\n", encoding="utf-8")
+    native_open = os.open
+    swapped = False
+
+    def intercepted_open(path: str | os.PathLike[str], flags: int, mode: int = 0o777) -> int:
+        nonlocal swapped
+        if os.fspath(path) == os.fspath(feature):
+            assert flags & os.O_NOFOLLOW, "symlinked header path must not be followed"
+            feature.unlink()
+            feature.symlink_to(outside)
+            swapped = True
+        return native_open(path, flags, mode)
+
+    monkeypatch.setattr(os, "open", intercepted_open)
+    with pytest.raises(FeatureReferenceError):
+        scan_tf_feature_headers({"core": root})
+    assert swapped
+    assert outside.read_text(encoding="utf-8").endswith("secret\n")
 
 
 def test_two_modules_with_same_feature_name_keep_separate_pages(
