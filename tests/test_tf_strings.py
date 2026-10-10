@@ -25,6 +25,7 @@ def test_real_text_fabric_loses_node_identity_from_literal_cr(
     node_features = {
         "otype": {1: "word", 2: "word", 3: "word", 4: "sentence"},
         "text": {1: "alpha\rspill", 2: "beta", 3: "gamma"},
+        "label": {4: "S1"},
     }
     edge_features = {"oslots": {4: {1, 2, 3}}}
     saved = Fabric(locations=[str(root)], silent="deep").save(
@@ -34,6 +35,12 @@ def test_real_text_fabric_loses_node_identity_from_literal_cr(
             "otype": {"valueType": "str"},
             "oslots": {"valueType": "str"},
             "text": {"valueType": "str"},
+            "label": {"valueType": "str"},
+            "otext": {
+                "sectionTypes": "sentence",
+                "sectionFeatures": "label",
+                "fmt:text-orig-full": "{text} ",
+            },
         },
         silent="deep",
     )
@@ -106,10 +113,10 @@ def test_aggregate_preflight_inspects_node_and_valued_edge_without_mutation() ->
     assert "private" not in str(caught.value)
     word_text[2] = "gamma"
 
-    valued_edges[3][2] = "edge\runsafe"
+    valued_edges[3][2] = "edge\rPRIVATE_SENTINEL_EDGE"
     with pytest.raises(TFStringSafetyError) as caught:
         preflight_tf_save_values(nodes, edges)
     assert "link" in str(caught.value)
     assert "3" in str(caught.value)
     assert "2" in str(caught.value)
-    assert "unsafe" not in str(caught.value)
+    assert "PRIVATE_SENTINEL_EDGE" not in str(caught.value)
