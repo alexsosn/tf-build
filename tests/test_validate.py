@@ -89,7 +89,6 @@ def test_validation_does_not_change_source_tf_bytes(tmp_path: Path) -> None:
     assert after == before
 
 
-
 def test_revalidation_ignores_compiled_cache_and_other_tf_directories(
     tmp_path: Path,
 ) -> None:
@@ -104,6 +103,7 @@ def test_revalidation_ignores_compiled_cache_and_other_tf_directories(
     assert second.level == "all"
     assert ".tf" not in second.feature_names
     assert "scratch" not in second.feature_names
+
 
 def test_missing_or_incorrect_required_features_are_rejected(tmp_path: Path) -> None:
     directory = _dataset(tmp_path)
