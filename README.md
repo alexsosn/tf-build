@@ -143,6 +143,38 @@ Agora, not tf-build, owns acquisition, sandbox/network enforcement, output
 validation and final promotion. These helpers never create the host root,
 execute conversion code or publish the user's destination.
 
+## Text-Fabric artifact validation
+
+Use `tf_build.validate` to verify an emitted dataset independently of its
+parser, with explicitly declared validation depth:
+
+```python
+from tf_build.validate import FeatureRequirement, validate_tf_artifact
+
+result = validate_tf_artifact(
+    "/path/to/generated/tf",
+    level="selected",
+    require_otext=True,
+    required_features=(
+        FeatureRequirement("lemma", kind="node", value_type="str"),
+    ),
+)
+print(result.level, result.feature_names)
+```
+
+- `metadata`: inspect file-backed features and metadata contracts, but do **not**
+  claim to have loaded the data.
+- `selected` (default): independently reload TF warp and caller-required
+  data features, including Text-Fabric's implicit text dependencies.
+- `all`: load every discovered node/edge feature; use as a deliberate
+  expensive release/integration gate for large corpora.
+
+Slot/node ontology and source-semantic checks remain the corpus project's
+responsibility. Runtime TF loading can create derived `.tf/` compiled caches;
+validation never intentionally rewrites the original `.tf` feature files.
+`otext.tf` is optional upstream; request it explicitly when
+the consuming corpus requires it.
+
 ## Generated Text-Fabric feature reference
 
 `tf_build.feature_docs` scans **emitted** Text-Fabric feature-file headers
