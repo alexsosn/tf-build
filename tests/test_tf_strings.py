@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Set
 from copy import deepcopy
 from pathlib import Path
 
@@ -84,12 +85,12 @@ def test_scalar_preflight_preserves_supported_strings_exactly(value: str) -> Non
 def test_aggregate_preflight_inspects_node_and_valued_edge_without_mutation() -> None:
     word_text = {1: "alpha\nbeta", 2: "gamma"}
     valued_edges = {3: {1: "edge\tvalue", 2: "other"}}
-    nodes = {
+    nodes: Mapping[str, Mapping[int, object]] = {
         "otype": {1: "word", 2: "word", 3: "sentence"},
         "text": word_text,
         "count": {1: 7, 2: None},
     }
-    edges = {
+    edges: Mapping[str, Mapping[int, Mapping[int, object] | Set[int]]] = {
         "oslots": {3: {1, 2}},
         "link": valued_edges,
     }
