@@ -110,6 +110,12 @@ def fetch_git_source(
     requested_revision = validate_git_revision(revision)
     if not isinstance(repository, str) or not repository.strip():
         raise GitSourceError("Git repository locator must be a non-empty string")
+    if repository.startswith("-") or any(
+        ord(char) < 32 or ord(char) == 127 for char in repository
+    ):
+        raise GitSourceError(
+            "Git repository locator must not be an option or contain control characters"
+        )
 
     target = Path(destination)
     if target.is_symlink():
@@ -151,6 +157,7 @@ def fetch_git_source(
             "fetch",
             "--depth",
             "1",
+            "--",
             repository,
             requested_revision,
             timeout_seconds=timeout,
