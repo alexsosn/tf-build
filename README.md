@@ -227,10 +227,12 @@ responsibility. For `selected` and `all`, validation loads a private,
 source-only view of the emitted `.tf` files so existing Text-Fabric `.tf/*.tfx`
 binary caches cannot hide corrupted raw feature bodies. The view prefers
 hardlinks (no duplicate source-byte storage) with a file-copy fallback, and
-cleans up derived caches on exit. The artifact's own `.tf` files and compiled
-caches are not intentionally changed; large datasets may require extra
-temporary storage or I/O if linking is unavailable. This is not an atomic
-snapshot under concurrent source mutation. `metadata` stays a cheap header
+cleans up derived caches on exit. If the corpus parent is read-only, the
+validator retries its private source-only workspace under the system temporary
+directory; a cross-filesystem fallback may copy all TF source data. Errors
+unrelated to directory permissions do not trigger that retry. The artifact's
+own `.tf` files and compiled caches are not intentionally changed. This is
+not an atomic snapshot under concurrent source mutation. `metadata` stays a cheap header
 check. `otext.tf` is optional upstream; request it explicitly when
 the consuming corpus requires it.
 
