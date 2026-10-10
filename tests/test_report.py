@@ -66,6 +66,27 @@ def test_git_source_provenance_accepts_stable_repository_locators(
     assert provenance.repository == repository
 
 
+@pytest.mark.parametrize(
+    "repository",
+    [
+        "https://alice:SECRET@example.invalid/private.git",
+        "https://TOKEN@example.invalid/private.git",
+        "http://TOKEN@example.invalid/private.git",
+        "https://%61lice:SECRET@example.invalid/private.git",
+        "https://example.invalid/private.git?access_token=SECRET",
+        "https://example.invalid/private.git#SECRET",
+        "ssh://git:SECRET@example.invalid/private.git",
+        "git@example.invalid:org/private.git?token=SECRET",
+        "git@example.invalid:org/private.git#SECRET",
+    ],
+)
+def test_git_source_provenance_rejects_credential_bearing_report_locator(
+    repository: str,
+) -> None:
+    with pytest.raises(ValueError, match="credential|query|fragment"):
+        GitSourceProvenance(repository, "a" * 40)
+
+
 def test_git_source_provenance_rejects_symbolic_revision() -> None:
     with pytest.raises(ValueError, match="40- or 64-hex"):
         GitSourceProvenance("example/upstream", "main")
