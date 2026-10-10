@@ -6,7 +6,12 @@ feature files are never intentionally rewritten by this validator.
 
 from __future__ import annotations
 
-from collections.abc import Collection
+import os
+import shutil
+import stat
+import tempfile
+from collections.abc import Collection, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -154,31 +159,75 @@ def _check_metadata(
     return categories
 
 
-def validate_tf_artifact(
-    directory: str | Path,
-    *,
-    required_features: Collection[FeatureRequirement] = (),
-    level: ValidationLevel = "selected",
-    require_otext: bool = False,
-) -> ArtifactValidation:
-    """Validate a TF artifact at an explicit inspection/reload depth.
+def _copy_source_without_following(source: Path, target: Path) -> None:
+    """Copy one regular TF feature without blocking on a raced FIFO."""
+    flags = os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0)
+    if os.name == "posix":
+        nonblocking = getattr(os, "O_NONBLOCK", None)
+        nofollow = getattr(os, "O_NOFOLLOW", None)
+        if nonblocking is None or nofollow is None:
+            raise ArtifactValidationError("POSIX safe TF source open flags unavailable")
+        flags |= nonblocking | nofollow
+    with os.fdopen(os.open(source, flags), "rb") as stream:
+        if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+            raise ArtifactValidationError(
+                f"TF source view includes a nonregular feature: {source.name}"
+            )
+        with target.open("xb") as output:
+            shutil.copyfileobj(stream, output, 1024 * 1024)
 
-    `metadata` validates headers, not feature bodies. `selected` also loads the
-    warp and caller-required features. `all` loads every discovered data feature.
-    No level claims to validate corpus-specific scholarly semantics.
+
+@contextmanager
+def _uncached_source_view(
+    directory: Path,
+    names: tuple[str, ...],
+) -> Iterator[Path]:
+    """Expose shipped TF sources without preexisting Text-Fabric binary caches.
+
+    Hardlinks avoid duplicating multi-gigabyte source data when supported.
+    Fabric.load only reads the .tf files; it writes derived caches in the
+    temporary location, never in the caller's artifact.
     """
-    if level not in ("metadata", "selected", "all"):
-        raise ArtifactValidationError(f"unsupported validation level: {level!r}")
+    try:
+        stage = tempfile.TemporaryDirectory(
+            prefix=".tf-build-source-verify-", dir=directory.parent
+        )
+    except OSError as exc:
+        raise ArtifactValidationError(
+            "could not create isolated Text-Fabric validation directory"
+        ) from exc
 
-    requirements = tuple(required_features)
-    if any(not isinstance(item, FeatureRequirement) for item in requirements):
-        raise ArtifactValidationError("required_features must contain FeatureRequirement objects")
+    with stage as temp_name:
+        temp_path = Path(temp_name)
+        for name in names:
+            source = directory / f"{name}.tf"
+            target = temp_path / source.name
+            if source.is_symlink():
+                raise ArtifactValidationError(f"TF feature file is a symlink: {source}")
+            try:
+                try:
+                    os.link(source, target, follow_symlinks=False)
+                except (OSError, NotImplementedError):
+                    _copy_source_without_following(source, target)
+                if target.is_symlink() or not target.is_file():
+                    raise ArtifactValidationError(
+                        f"TF source view includes a nonregular feature: {name}"
+                    )
+            except OSError as exc:
+                raise ArtifactValidationError(
+                    f"could not stage TF source feature: {name}"
+                ) from exc
+        yield temp_path
+
+
+def _validate_loaded_features(
+    path: Path,
+    names: tuple[str, ...],
+    requirements: tuple[FeatureRequirement, ...],
+    level: ValidationLevel,
+) -> ArtifactValidation:
+    """Execute unchanged Text-Fabric checks against a chosen source view."""
     required_names = tuple(item.name for item in requirements)
-    if len(set(required_names)) != len(required_names):
-        raise ArtifactValidationError("duplicate required TF feature names")
-
-    path = Path(directory)
-    names = _file_features(path, require_otext=require_otext)
     try:
         fabric = Fabric(locations=[str(path)], silent="deep")
     except Exception as exc:
@@ -218,6 +267,39 @@ def validate_tf_artifact(
         feature_names=names,
         required_features=required_names,
     )
+
+
+def validate_tf_artifact(
+    directory: str | Path,
+    *,
+    required_features: Collection[FeatureRequirement] = (),
+    level: ValidationLevel = "selected",
+    require_otext: bool = False,
+) -> ArtifactValidation:
+    """Validate a TF artifact at an explicit inspection/reload depth.
+
+    `metadata` validates headers, not feature bodies. `selected` also loads the
+    warp and caller-required features. `all` loads every discovered data feature.
+    No level claims to validate corpus-specific scholarly semantics.
+    """
+    if level not in ("metadata", "selected", "all"):
+        raise ArtifactValidationError(f"unsupported validation level: {level!r}")
+
+    requirements = tuple(required_features)
+    if any(not isinstance(item, FeatureRequirement) for item in requirements):
+        raise ArtifactValidationError("required_features must contain FeatureRequirement objects")
+    required_names = tuple(item.name for item in requirements)
+    if len(set(required_names)) != len(required_names):
+        raise ArtifactValidationError("duplicate required TF feature names")
+
+    path = Path(directory)
+    names = _file_features(path, require_otext=require_otext)
+    if level == "metadata":
+        return _validate_loaded_features(path, names, requirements, level)
+    # Do not trust a newer .tf/*.tfx cache: Text-Fabric otherwise validates
+    # headers while loading possibly stale binary data instead of raw bodies.
+    with _uncached_source_view(path, names) as source_view:
+        return _validate_loaded_features(source_view, names, requirements, level)
 
 
 __all__ = [
