@@ -72,6 +72,8 @@ def _validate_repository_locator(repository: str) -> None:
 def _validate_artifact_path(path: str) -> None:
     if not isinstance(path, str):
         raise ValueError("artifact path must be a string")
+    if any(ord(char) < 32 or ord(char) == 127 for char in path):
+        raise ValueError("artifact path must not contain control characters")
     parts = path.split("/")
     if (
         not path
