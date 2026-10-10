@@ -54,6 +54,7 @@ def _read_header(path: Path, module: str) -> FeatureHeader:
     markers: set[str] = set()
     metadata: dict[str, str] = {}
     separated = False
+    first_line = True
     try:
         with path.open("r", encoding="utf-8") as stream:
             header_chars = 0
@@ -67,6 +68,15 @@ def _read_header(path: Path, module: str) -> FeatureHeader:
                         f"{path}: TF feature header exceeds inspection limit"
                     )
                 line = raw.rstrip("\r\n")
+                if first_line:
+                    # TF Data._readTf() requires the kind marker on line one.
+                    if line not in {"@node", "@edge", "@config"}:
+                        raise FeatureReferenceError(
+                            f"{path}: TF first line must declare @node, @edge or @config"
+                        )
+                    markers.add(line[1:])
+                    first_line = False
+                    continue
                 if not line:
                     separated = True
                     break
