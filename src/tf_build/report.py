@@ -8,6 +8,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import PurePosixPath, PureWindowsPath
 from typing import Literal
+from urllib.parse import urlsplit
 
 from .source import GitSourceError, validate_git_revision
 
@@ -33,6 +34,8 @@ def _require_finite_number(value: int | float, label: str) -> None:
 
 def _validate_repository_locator(repository: str) -> None:
     _require_text(repository, "Git repository")
+    if any(ord(char) < 32 or ord(char) == 127 for char in repository):
+        raise ValueError("Git repository provenance must not contain control characters")
     lowered = repository.lower()
     path_parts = repository.replace("\\", "/").split("/")
     if (
@@ -46,6 +49,24 @@ def _validate_repository_locator(repository: str) -> None:
         raise ValueError(
             "Git repository provenance must not be a local absolute/home path"
         )
+
+    if "?" in repository or "#" in repository:
+        raise ValueError(
+            "Git repository provenance must not contain query or fragment data"
+        )
+    if "://" in repository:
+        try:
+            parsed = urlsplit(repository)
+            user = parsed.username
+            password = parsed.password
+        except ValueError as exc:
+            raise ValueError("Git repository provenance URL is malformed") from exc
+        if user is not None and (
+            password is not None or parsed.scheme not in {"ssh", "git+ssh"}
+        ):
+            raise ValueError(
+                "Git repository provenance must not contain URL credentials"
+            )
 
 
 def _validate_artifact_path(path: str) -> None:
