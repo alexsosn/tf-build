@@ -105,6 +105,33 @@ def test_revalidation_ignores_compiled_cache_and_other_tf_directories(
     assert "scratch" not in second.feature_names
 
 
+
+@pytest.mark.parametrize("bad_header", ["@valueType=garbage", "@valueType="])
+def test_metadata_rejects_invalid_declared_value_type(
+    tmp_path: Path, bad_header: str
+) -> None:
+    directory = _dataset(tmp_path)
+    feature = directory / "count.tf"
+    text = feature.read_text(encoding="utf-8")
+    assert "@valueType=int" in text
+    feature.write_text(text.replace("@valueType=int", bad_header), encoding="utf-8")
+    with pytest.raises(ArtifactValidationError, match="count"):
+        validate_tf_artifact(directory, level="metadata")
+
+
+def test_metadata_rejects_edge_values_on_node_feature(tmp_path: Path) -> None:
+    directory = _dataset(tmp_path)
+    feature = directory / "text.tf"
+    text = feature.read_text(encoding="utf-8")
+    assert "@node" in text
+    feature.write_text(
+        text.replace("@node\n", "@node\n@edgeValues\n", 1),
+        encoding="utf-8",
+    )
+    with pytest.raises(ArtifactValidationError, match="text"):
+        validate_tf_artifact(directory, level="metadata")
+
+
 def test_missing_or_incorrect_required_features_are_rejected(tmp_path: Path) -> None:
     directory = _dataset(tmp_path)
     cases = (
