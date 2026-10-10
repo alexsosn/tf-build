@@ -47,7 +47,7 @@ report = BuildReport(
 print(report.to_json())
 ```
 
-Artifact paths are portable logical POSIX-relative paths. Reports deliberately contain no file digests or release-certification claims; deterministic artifact identity is a separate layer.
+Artifact paths are portable logical POSIX-relative paths. Their components must be nonempty, must not traverse directories, and must not contain ASCII control characters (including NUL, CR, LF, TAB or DEL); arbitrary valid Unicode text and ordinary punctuation remain supported. Reports deliberately contain no file digests or release-certification claims; deterministic artifact identity is a separate layer.
 
 Git source provenance is a **public identifier**, not the credential-bearing URL
 used for fetching. `GitSourceProvenance` accepts clean HTTPS and conventional
