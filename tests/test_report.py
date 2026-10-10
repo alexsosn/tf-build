@@ -78,12 +78,14 @@ def test_git_source_provenance_accepts_stable_repository_locators(
         "ssh://git:SECRET@example.invalid/private.git",
         "git@example.invalid:org/private.git?token=SECRET",
         "git@example.invalid:org/private.git#SECRET",
+        "https:\n//TOKEN@example.invalid/private.git",
+        "git@example.invalid:org/private.git\tSECRET",
     ],
 )
 def test_git_source_provenance_rejects_credential_bearing_report_locator(
     repository: str,
 ) -> None:
-    with pytest.raises(ValueError, match="credential|query|fragment"):
+    with pytest.raises(ValueError, match="credential|query|fragment|control"):
         GitSourceProvenance(repository, "a" * 40)
 
 
