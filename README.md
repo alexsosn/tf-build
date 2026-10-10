@@ -81,6 +81,13 @@ snapshot = fetch_git_source(
 
 Acquisition uses a sibling staging directory, verifies the detached checkout before publication, and supports both SHA-1 and SHA-256 Git repositories. Conversion code should still receive local inputs and remain network-free.
 
+Acquisition fetches the pinned revision directly, without persisting the
+caller-supplied repository URL as a Git `origin` remote. The temporary
+`.git/FETCH_HEAD` ledger is removed before the detached checkout is published:
+credential-bearing acquisition URLs must not become reusable source metadata.
+This does not control credentials cached by external Git helpers or remove
+secrets from the running process.
+
 Git inspection and acquisition commands have a generous **30-minute per-command**
 timeout by default, not an overall materialization deadline. Callers with
 different transport requirements can override it:
