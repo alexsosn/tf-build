@@ -144,19 +144,26 @@ def fetch_git_source(
         if len(requested_revision) == 64:
             init_args.append("--object-format=sha256")
         _run_git(staging, *init_args, timeout_seconds=timeout)
-        _run_git(staging, "remote", "add", "origin", repository, timeout_seconds=timeout)
+        # Fetch the pinned revision directly. A configured origin would persist
+        # the caller's potentially credential-bearing URL in shipped .git/config.
         _run_git(
             staging,
             "fetch",
             "--depth",
             "1",
-            "origin",
+            repository,
             requested_revision,
             timeout_seconds=timeout,
         )
         _run_git(
             staging, "checkout", "--detach", "FETCH_HEAD", timeout_seconds=timeout
         )
+        # Git's ephemeral fetch ledger can contain transport URLs. After the
+        # detached checkout HEAD is a committed SHA and no longer needs it.
+        try:
+            (staging / ".git" / "FETCH_HEAD").unlink(missing_ok=True)
+        except OSError as exc:
+            raise GitSourceError("could not clean transient Git fetch metadata") from exc
 
         snapshot = verify_git_source(
             staging,
