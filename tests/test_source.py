@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+import traceback
 from pathlib import Path
 from typing import Any, cast
 
@@ -379,6 +380,48 @@ def test_fetch_and_verify_accept_custom_timeout_against_real_local_git(
     )
     assert acquired.revision == revision
     assert (acquired.path / "tracked.txt").read_text(encoding="utf-8") == "initial\n"
+
+
+
+@pytest.mark.parametrize("mode", ["timeout", "exit", "oserror"])
+def test_git_remote_failures_redact_credential_locators_in_formatted_tracebacks(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mode: str
+) -> None:
+    secret = "SECRET_CREDENTIAL"
+    repository = f"https://user:{secret}@example.invalid/private.git"
+    destination = tmp_path / "acquired"
+    destination.mkdir()
+    native_run = subprocess.run
+
+    def failed_remote(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        command = args[0]
+        assert isinstance(command, list)
+        if "remote" in command:
+            if mode == "timeout":
+                raise subprocess.TimeoutExpired(command, 2.0, stderr=f"{secret} stderr")
+            if mode == "exit":
+                raise subprocess.CalledProcessError(
+                    128, command, stderr=f"{secret} stderr"
+                )
+            raise OSError(f"{secret} transport subprocess failure")
+        return cast(subprocess.CompletedProcess[str], native_run(*args, **kwargs))
+
+    monkeypatch.setattr("tf_build.source.subprocess.run", failed_remote)
+    with pytest.raises(GitSourceError) as caught:
+        fetch_git_source(repository, destination, revision="a" * 40, timeout_seconds=2.0)
+
+    error = caught.value
+    assert secret not in str(error)
+    assert secret not in "".join(traceback.format_exception(error))
+    if mode == "timeout":
+        assert isinstance(error.__cause__, subprocess.TimeoutExpired)
+        assert error.__cause__.timeout == 2.0
+    if mode == "exit":
+        assert isinstance(error.__cause__, subprocess.CalledProcessError)
+        assert error.__cause__.returncode == 128
+    assert destination.is_dir()
+    assert not any(destination.iterdir())
+    assert not tuple(tmp_path.glob(".acquired.tf-build-*"))
 
 
 def test_fetch_git_source_does_not_clobber_destination_created_before_publish(
