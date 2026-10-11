@@ -11,10 +11,14 @@ import hashlib
 import re
 import stat
 import zipfile
+from email.parser import BytesParser
 from pathlib import Path
 
 _DIST_INFO = re.compile(r"tf_build-[^/]+\.dist-info\Z")
 _CHUNK = 1024 * 1024
+_MAX_RUNTIME_METADATA = 1024 * 1024
+_MAX_ENTRY_POINTS = 64 * 1024
+_RUNTIME_FIELDS = ("Name", "Version", "Requires-Python", "Requires-Dist", "Provides-Extra")
 
 
 class WheelPayloadMismatch(ValueError):
@@ -97,6 +101,65 @@ def _package_payload(wheel: Path) -> dict[str, str]:
     return files
 
 
+def _read_bounded(archive: zipfile.ZipFile, name: str, limit: int) -> bytes:
+    """Read a small wheel metadata file without extraction or unbounded allocation."""
+    member = archive.getinfo(name)
+    if member.file_size > limit:
+        raise WheelPayloadMismatch(f"wheel runtime metadata is too large: {name!r}")
+    with archive.open(member) as stream:
+        data = stream.read(limit + 1)
+    if len(data) > limit:
+        raise WheelPayloadMismatch(f"wheel runtime metadata exceeds limit: {name!r}")
+    return data
+
+
+def _runtime_contract(
+    wheel: Path,
+) -> tuple[tuple[tuple[str, tuple[str, ...]], ...], bytes | None]:
+    """Compare install-relevant metadata while permitting generated metadata drift."""
+    try:
+        with zipfile.ZipFile(wheel) as archive:
+            roots: set[str] = set()
+            names = set(archive.namelist())
+            for name in names:
+                root = name.split("/", 1)[0]
+                if _DIST_INFO.fullmatch(root):
+                    roots.add(root)
+            if len(roots) != 1:
+                raise WheelPayloadMismatch("wheel has ambiguous runtime metadata roots")
+            root = next(iter(roots))
+            metadata_path = f"{root}/METADATA"
+            if metadata_path not in names:
+                raise WheelPayloadMismatch("wheel lacks runtime METADATA")
+            raw = _read_bounded(archive, metadata_path, _MAX_RUNTIME_METADATA)
+            entry_path = f"{root}/entry_points.txt"
+            entry_points = (
+                _read_bounded(archive, entry_path, _MAX_ENTRY_POINTS)
+                if entry_path in names
+                else None
+            )
+    except (OSError, zipfile.BadZipFile, RuntimeError, EOFError, KeyError) as exc:
+        raise WheelPayloadMismatch(
+            f"could not inspect wheel runtime metadata: {wheel.name}"
+        ) from exc
+
+    metadata = BytesParser().parsebytes(raw)
+    if metadata.defects:
+        raise WheelPayloadMismatch("wheel runtime metadata has malformed headers")
+    for key in ("Metadata-Version", "Name", "Version"):
+        values = metadata.get_all(key) or ()
+        if len(values) != 1 or not str(values[0]).strip():
+            raise WheelPayloadMismatch(f"wheel runtime metadata requires one {key}")
+    fields: list[tuple[str, tuple[str, ...]]] = []
+    for key in _RUNTIME_FIELDS:
+        values = metadata.get_all(key) or ()
+        normalized = tuple(sorted(str(value).strip() for value in values))
+        if any(not value for value in normalized):
+            raise WheelPayloadMismatch(f"wheel runtime metadata has empty {key}")
+        fields.append((key, normalized))
+    return tuple(fields), entry_points
+
+
 def compare_wheel_payloads(direct: Path, rebuilt: Path) -> tuple[str, ...]:
     """Require identical unpacked package paths and bytes in two wheels."""
     source = _package_payload(direct)
@@ -116,6 +179,8 @@ def compare_wheel_payloads(direct: Path, rebuilt: Path) -> tuple[str, ...]:
         if changed:
             details.append(f"changed package bytes: {', '.join(changed)}")
         raise WheelPayloadMismatch("; ".join(details))
+    if _runtime_contract(direct) != _runtime_contract(rebuilt):
+        raise WheelPayloadMismatch("wheel runtime metadata/entry point contract differs")
     return tuple(sorted(source))
 
 
