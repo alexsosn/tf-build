@@ -13,7 +13,7 @@ import stat
 import zipfile
 from pathlib import Path
 
-_DIST_INFO = re.compile(r"tf_build-[^/]+\\.dist-info\\Z")
+_DIST_INFO = re.compile(r"tf_build-[^/]+\.dist-info\Z")
 _CHUNK = 1024 * 1024
 
 
@@ -35,8 +35,8 @@ def _package_payload(wheel: Path) -> dict[str, str]:
                 if (
                     not name
                     or name.startswith("/")
-                    or "\\\\" in name
-                    or "\\x00" in name
+                    or "\\" in name
+                    or "\x00" in name
                     or any(part in {"", ".", ".."} for part in parts)
                     or (parts and ":" in parts[0])
                 ):
@@ -79,7 +79,10 @@ def compare_wheel_payloads(direct: Path, rebuilt: Path) -> tuple[str, ...]:
     candidate = _package_payload(rebuilt)
     missing = sorted(source.keys() - candidate.keys())
     added = sorted(candidate.keys() - source.keys())
-    changed = sorted(name for name in source.keys() & candidate.keys() if source[name] != candidate[name])
+    changed = sorted(
+        name for name in source.keys() & candidate.keys()
+        if source[name] != candidate[name]
+    )
     if missing or added or changed:
         details = []
         if missing:
