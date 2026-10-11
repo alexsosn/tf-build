@@ -21,6 +21,7 @@ jobs:
       cancel-in-progress: false
     permissions:
       contents: write
+      actions: read
     steps:
       - uses: actions/checkout@v4
         with:
@@ -86,6 +87,18 @@ jobs:
             --pyproject "$GITHUB_WORKSPACE/pyproject.toml" \
             --revision "$TF_RELEASE_SOURCE" \
             --output "$RUNNER_TEMP/wheels/wheel-manifest.json"
+      - name: Require successful main CI on the exact tagged commit
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          passed="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$TF_RELEASE_SOURCE&event=push&per_page=100" \
+            --jq '[.workflow_runs[] | select(.head_sha == "'$TF_RELEASE_SOURCE'") | select(.conclusion == "success")] | length')"
+          if [[ ! "$passed" =~ ^[0-9]+$ || "$passed" -lt 1 ]]; then
+            echo "Exact release commit has no successful main push CI (matrix + distribution)" >&2
+            exit 1
+          fi
       - name: Verify remote tag did not move during build
         shell: bash
         env:
