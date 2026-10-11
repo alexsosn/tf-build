@@ -372,6 +372,45 @@ prepared wheelhouse is sufficient for that runner/platform. Consumers must
 verify the manifest hashes after downloading and continue to use immutable
 source pins until a durable versioned release with dependency locking exists.
 
+
+## Versioned prerelease preparation
+
+The proposed first candidate is `tf-build==0.1.0rc1` (tag `v0.1.0rc1`).
+A merged candidate PR or 30-day GitHub Actions artifact **is not** a published
+GitHub Release. CI builds real wheel and sdist archives, checks the embedded
+package version, and records full source SHA plus exact asset SHA256 in
+`wheel-manifest.json`. It also tests installation of the wheel and a
+prepared offline dependency wheelhouse. That Linux CI wheelhouse is not a
+cross-platform dependency lock.
+
+**Owner-controlled publication procedure** (only after final release approval):
+
+1. Verify the exact reviewed main commit and its successful quality and
+   distribution CI. Configure a protected GitHub Actions `release` environment
+   with required reviewers and repository tag protection/immutability policy.
+2. Create the *existing* `v0.1.0rc1` tag at that reviewed main commit. The
+   workflow does not create, move or overwrite tags.
+3. Manually dispatch **Publish verified prerelease** from **main** with that
+   tag and approve the release environment. It verifies tag ancestry and
+   version, requires a successful main CI run on that exact tagged commit,
+   retests the tagged source, builds and inspects wheel/sdist,
+   rechecks tag identity and publishes a prerelease without overwriting an
+   existing release.
+4. Retrieve the real wheel, sdist and `wheel-manifest.json` release assets.
+   Verify each downloaded artifact's SHA256 against the actual manifest
+   (e.g. `sha256sum FILE`). Record the real release URL and exact source
+   revision in the downstream deployment record.
+5. Only then migrate consumers such as ORAEC-TF from the direct Git URL to
+   an explicitly versioned, dependency-locked, hash-verified offline
+   wheelhouse; test genuine installed consumer CLI and Text-Fabric outputs
+   in a fresh no-index environment.
+
+Release workflow permissions are scoped to `contents: write` in its manually
+approved job. A source SHA and hash manifest are integrity evidence, **not**
+a signed attestation; dependency wheels must be independently locked per
+target platform. Do not claim a release until the GitHub Release and verified
+assets really exist.
+
 ## Development
 
 Python 3.11+ is the initial supported runtime. Text-Fabric 13.x is the initial compatibility target.

@@ -46,8 +46,13 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Build wheel without editable installation
-        run: python -m pip wheel --no-deps --wheel-dir "$RUNNER_TEMP/wheels" .
+      - name: Build wheel and source distribution without editable installation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install 'build>=1,<2'
+          python -m pip wheel --no-deps --wheel-dir "$RUNNER_TEMP/wheels" .
+          python -m build --sdist --outdir "$RUNNER_TEMP/sdist" .
       - name: Installed wheel smoke (RED then GREEN)
         shell: bash
         run: |
@@ -84,6 +89,8 @@ jobs:
           python "$GITHUB_WORKSPACE/scripts/wheel_manifest.py" \
             --wheel-dir "$RUNNER_TEMP/wheels" \
             --wheelhouse "$RUNNER_TEMP/wheelhouse" \
+            --sdist-dir "$RUNNER_TEMP/sdist" \
+            --release-tag "v$(python -c 'import tomllib; print(tomllib.load(open("pyproject.toml","rb"))["project"]["version"])')" \
             --pyproject "$GITHUB_WORKSPACE/pyproject.toml" \
             --revision "$(git -C "$GITHUB_WORKSPACE" rev-parse HEAD)" \
             --output "$RUNNER_TEMP/wheels/wheel-manifest.json"
@@ -94,5 +101,6 @@ jobs:
           retention-days: 30
           path: |
             ${{ runner.temp }}/wheels/*.whl
+            ${{ runner.temp }}/sdist/*.tar.gz
             ${{ runner.temp }}/wheels/wheel-manifest.json
             ${{ runner.temp }}/wheelhouse/*.whl
