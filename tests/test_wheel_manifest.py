@@ -14,7 +14,6 @@ import pytest
 
 import scripts.wheel_manifest as manifest_module
 from scripts.wheel_manifest import (
-    _identity,
     WheelManifestError,
     build_wheel_manifest,
     write_wheel_manifest,
@@ -421,7 +420,7 @@ def test_manifest_identity_rejects_symlink_swap_after_preflight(
 
     monkeypatch.setattr(Path, "is_file", replace_when_checked)
     with pytest.raises(WheelManifestError, match="regular|changed|open|identity"):
-        _identity(candidate)
+        manifest_module._identity(candidate)
     assert swapped
     assert candidate.is_symlink()
     assert moved.read_bytes() == b"approved-release-wheel"
@@ -455,7 +454,7 @@ def test_manifest_identity_rejects_same_size_inode_swap_during_hash(
 
     monkeypatch.setattr(manifest_module.hashlib, "sha256", SwapAfterDigestUpdate)
     with pytest.raises(WheelManifestError, match="changed|identity|stable|regular"):
-        _identity(candidate)
+        manifest_module._identity(candidate)
     assert swapped
     assert moved.read_bytes() == before
     assert candidate.read_bytes() == after
