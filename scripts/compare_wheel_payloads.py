@@ -152,7 +152,7 @@ def _runtime_contract(
     fields: list[tuple[str, tuple[str, ...]]] = []
     for key in _RUNTIME_FIELDS:
         values = metadata.get_all(key) or ()
-        normalized = tuple(sorted(" ".join(str(value).split()) for value in values))
+        normalized = tuple(sorted(str(value).strip() for value in values))
         if any(not value for value in normalized):
             raise WheelPayloadMismatch(f"wheel runtime metadata has empty {key}")
         fields.append((key, normalized))
