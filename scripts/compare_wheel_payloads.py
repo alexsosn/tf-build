@@ -139,7 +139,9 @@ def _runtime_contract(
                 else None
             )
     except (OSError, zipfile.BadZipFile, RuntimeError, EOFError, KeyError) as exc:
-        raise WheelPayloadMismatch(f"could not inspect wheel runtime metadata: {wheel.name}") from exc
+        raise WheelPayloadMismatch(
+            f"could not inspect wheel runtime metadata: {wheel.name}"
+        ) from exc
 
     metadata = BytesParser().parsebytes(raw)
     if metadata.defects:
