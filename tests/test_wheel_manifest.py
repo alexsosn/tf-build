@@ -22,7 +22,7 @@ from scripts.wheel_manifest import (
 def _fixture(tmp_path: Path, *, version: str = "0.1.0.dev0") -> tuple[Path, Path, Path]:
     pyproject = tmp_path / "pyproject.toml"
     pyproject.write_text(
-        '[project]\nname = "tf-build"\nversion = "0.1.0.dev0"\n',
+        f'[project]\nname = "tf-build"\nversion = "{version}"\n',
         encoding="utf-8",
     )
     wheels = tmp_path / "wheels"
