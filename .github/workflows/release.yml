@@ -1,0 +1,116 @@
+name: Publish verified prerelease
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing immutable version tag (for example v0.1.0rc1)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Verify existing version tag and source ancestry
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+((a|b|rc)[0-9]+)?$ ]]; then
+            echo "Release input is not a valid version tag" >&2
+            exit 1
+          fi
+          git fetch origin main --tags
+          sha="$(git rev-parse --verify "refs/tags/${RELEASE_TAG}^{commit}")"
+          git merge-base --is-ancestor "$sha" "origin/main" || {
+            echo "Release commit is not contained in main" >&2
+            exit 1
+          }
+          git checkout --detach "$sha"
+          version="$(python -c 'import tomllib; print(tomllib.load(open("pyproject.toml","rb"))["project"]["version"])')"
+          if [[ "$RELEASE_TAG" != "v${version}" ]]; then
+            echo "Tag and source package version disagree" >&2
+            exit 1
+          fi
+          echo "TF_RELEASE_SOURCE=$sha" >> "$GITHUB_ENV"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Test reviewed tagged source
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m ruff check .
+          python -m mypy
+          python -m pytest -q
+      - name: Build immutable wheel and source distribution
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install 'build>=1,<2'
+          python -m pip wheel --no-deps --wheel-dir "$RUNNER_TEMP/wheels" .
+          python -m build --sdist --outdir "$RUNNER_TEMP/sdist" .
+      - name: Smoke noneditable wheel in clean virtual environment
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m venv "$RUNNER_TEMP/release-wheel-venv"
+          vpy="$RUNNER_TEMP/release-wheel-venv/bin/python"
+          cd "$RUNNER_TEMP"
+          "$vpy" -m pip install "$RUNNER_TEMP"/wheels/tf_build-*.whl
+          "$vpy" "$GITHUB_WORKSPACE/scripts/check_installed_wheel.py" "$GITHUB_WORKSPACE"
+      - name: Verify candidate release archive metadata and SHA256
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          python scripts/wheel_manifest.py \
+            --wheel-dir "$RUNNER_TEMP/wheels" \
+            --sdist-dir "$RUNNER_TEMP/sdist" \
+            --release-tag "$RELEASE_TAG" \
+            --pyproject "$GITHUB_WORKSPACE/pyproject.toml" \
+            --revision "$TF_RELEASE_SOURCE" \
+            --output "$RUNNER_TEMP/wheels/wheel-manifest.json"
+      - name: Verify remote tag did not move during build
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          local_tag="$(git rev-parse "refs/tags/$RELEASE_TAG")"
+          remote_tag="$(git ls-remote --refs origin "refs/tags/$RELEASE_TAG" | awk 'NF {print $1}')"
+          if [[ -z "$remote_tag" || "$remote_tag" != "$local_tag" ]]; then
+            echo "Tag moved or disappeared during release build" >&2
+            exit 1
+          fi
+      - name: Publish prerelease assets without creating or overwriting tag
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release already exists; refusing to overwrite assets" >&2
+            exit 1
+          fi
+          gh release create "$RELEASE_TAG" \
+            "$RUNNER_TEMP"/wheels/tf_build-*.whl \
+            "$RUNNER_TEMP"/sdist/tf_build-*.tar.gz \
+            "$RUNNER_TEMP/wheels/wheel-manifest.json" \
+            --repo "$GITHUB_REPOSITORY" \
+            --verify-tag \
+            --prerelease \
+            --title "tf-build $RELEASE_TAG" \
+            --notes "Verified candidate wheel and sdist from exact Git commit $TF_RELEASE_SOURCE. Compare SHA256 bytes against wheel-manifest.json before installing."
