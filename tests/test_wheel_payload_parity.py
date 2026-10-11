@@ -151,3 +151,44 @@ def test_each_distribution_workflow_gates_sdist_rebuild_before_wheel_smoke(
     assert check in text
     assert text.index("sdist-wheels") < text.index(check)
     assert text.index(check) < text.index("scripts/check_installed_wheel.py")
+
+
+@pytest.mark.parametrize(
+    "colliding_member",
+    [
+        "tf_build/source.py/",
+        "tf_build/nested",
+        "tf_build/nested/helper.py/",
+        "tf_build-0.1.0rc1.dist-info/METADATA/",
+        "tf_build-0.1.0rc1.dist-info",
+    ],
+)
+@pytest.mark.parametrize("collision_first", [False, True])
+def test_reject_ambiguous_file_directory_zip_layout_in_either_order(
+    tmp_path: Path, colliding_member: str, collision_first: bool
+) -> None:
+    """Both *identically* malformed wheels must fail before payload comparison."""
+    original = _wheel(tmp_path / "original.whl")
+    candidate = tmp_path / "candidate.whl"
+    with zipfile.ZipFile(original) as archive:
+        members = [(item.filename, archive.read(item)) for item in archive.infolist()]
+    collision = (colliding_member, b"" if colliding_member.endswith("/") else b"shadow")
+    if collision_first:
+        members.insert(0, collision)
+    else:
+        members.append(collision)
+    for wheel in (original, candidate):
+        with zipfile.ZipFile(wheel, "w") as archive:
+            for name, contents in members:
+                archive.writestr(name, contents)
+    with pytest.raises(WheelPayloadMismatch, match="collid|ancestor|directory"):
+        compare_wheel_payloads(original, candidate)
+
+
+def test_explicit_and_implicit_directory_members_can_coexist(tmp_path: Path) -> None:
+    """Legitimate wheels frequently spell directory entries out explicitly."""
+    wheel = _wheel(tmp_path / "direct.whl")
+    with zipfile.ZipFile(wheel, "a") as archive:
+        for name in ("tf_build/", "tf_build/nested/", "tf_build-0.1.0rc1.dist-info/"):
+            archive.writestr(name, b"")
+    assert len(compare_wheel_payloads(wheel, wheel)) == 3
