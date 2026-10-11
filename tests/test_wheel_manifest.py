@@ -8,6 +8,7 @@ import zipfile
 from pathlib import Path
 
 import pytest
+
 from scripts.wheel_manifest import (
     WheelManifestError,
     build_wheel_manifest,
