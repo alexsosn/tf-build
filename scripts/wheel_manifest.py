@@ -12,7 +12,9 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
+import stat
 import tarfile
 import tomllib
 import zipfile
@@ -28,13 +30,56 @@ class WheelManifestError(ValueError):
 
 
 def _identity(wheel: Path) -> dict[str, str | int]:
+    """Hash a stable regular file, never following raced symlinks on POSIX."""
     if wheel.is_symlink() or not wheel.is_file():
         raise WheelManifestError(f"wheel is not a regular file: {wheel.name}")
-    digest = hashlib.sha256()
-    with wheel.open("rb") as stream:
-        while block := stream.read(1024 * 1024):
-            digest.update(block)
-    return {"file": wheel.name, "bytes": wheel.stat().st_size, "sha256": digest.hexdigest()}
+    flags = os.O_RDONLY | getattr(os, "O_BINARY", 0)
+    if os.name == "posix":
+        nofollow = getattr(os, "O_NOFOLLOW", None)
+        nonblocking = getattr(os, "O_NONBLOCK", None)
+        if nofollow is None or nonblocking is None:
+            raise WheelManifestError("safe POSIX manifest file open flags unavailable")
+        flags |= nofollow | nonblocking
+
+    try:
+        initial = wheel.lstat()
+        if not stat.S_ISREG(initial.st_mode):
+            raise WheelManifestError(f"wheel is not a regular file: {wheel.name}")
+        fd = os.open(wheel, flags)
+        with os.fdopen(fd, "rb") as stream:
+            first = os.fstat(stream.fileno())
+            if not stat.S_ISREG(first.st_mode) or (
+                initial.st_dev,
+                initial.st_ino,
+            ) != (first.st_dev, first.st_ino):
+                raise WheelManifestError(f"wheel identity changed during open: {wheel.name}")
+            digest = hashlib.sha256()
+            size = 0
+            while block := stream.read(1024 * 1024):
+                digest.update(block)
+                size += len(block)
+            last = os.fstat(stream.fileno())
+        current = wheel.lstat()
+    except OSError as exc:
+        raise WheelManifestError(f"wheel cannot be safely hashed: {wheel.name}") from exc
+
+    opened_identity = (
+        first.st_dev, first.st_ino, first.st_size,
+        first.st_mtime_ns, first.st_ctime_ns,
+    )
+    completed_identity = (
+        last.st_dev, last.st_ino, last.st_size,
+        last.st_mtime_ns, last.st_ctime_ns,
+    )
+    if (
+        opened_identity != completed_identity
+        or size != last.st_size
+        or not stat.S_ISREG(current.st_mode)
+        or (current.st_dev, current.st_ino, current.st_size)
+        != (last.st_dev, last.st_ino, last.st_size)
+    ):
+        raise WheelManifestError(f"wheel changed during hashing: {wheel.name}")
+    return {"file": wheel.name, "bytes": size, "sha256": digest.hexdigest()}
 
 
 _RELEASE_VERSION = re.compile(r"\d+\.\d+\.\d+(?:(?:a|b|rc)\d+)?\Z")
