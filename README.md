@@ -391,8 +391,11 @@ Generated `.dist-info/` content such as `RECORD` and human-readable
 descriptions, plus ZIP timestamps and compression, may differ. Runtime
 declarations (`Name`, `Version`, `Requires-Python`, `Requires-Dist`,
 `Provides-Extra`, and optional `entry_points.txt`) must match between
-both wheels. Missing, added or byte-divergent package modules also fail
-the gate before release.
+both wheels. The required `.dist-info/WHEEL` install contract must also
+agree (wheel format version, `Root-Is-Purelib`, compatibility `Tag` values
+and optional `Build`). The build tool's `Generator` description may differ.
+Missing, added or byte-divergent package modules also fail the gate before
+release.
 The ZIP inspection also rejects colliding file/directory paths, file ancestors
 of nested members, duplicate entries and noncanonical repeated terminal path
 separators (including within `.dist-info/`) without extracting the archives.
