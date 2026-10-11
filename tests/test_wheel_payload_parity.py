@@ -271,7 +271,7 @@ def test_missing_or_ambiguous_runtime_metadata_fails(
 ) -> None:
     direct = _wheel(tmp_path / "direct.whl")
     rebuilt = _wheel(tmp_path / "rebuilt.whl", metadata=malformed)
-    with pytest.raises(WheelPayloadMismatch, match="metadata|contract"):
+    with pytest.raises(WheelPayloadMismatch, match="metadata|METADATA|contract"):
         compare_wheel_payloads(direct, rebuilt)
 
 
