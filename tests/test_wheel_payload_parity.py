@@ -192,3 +192,22 @@ def test_explicit_and_implicit_directory_members_can_coexist(tmp_path: Path) -> 
         for name in ("tf_build/", "tf_build/nested/", "tf_build-0.1.0rc1.dist-info/"):
             archive.writestr(name, b"")
     assert len(compare_wheel_payloads(wheel, wheel)) == 3
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "tf_build//",
+        "tf_build/nested//",
+        "tf_build-0.1.0rc1.dist-info//",
+    ],
+)
+def test_reject_ambiguous_repeated_trailing_slashes(
+    tmp_path: Path, name: str
+) -> None:
+    wheel = _wheel(tmp_path / "noncanonical.whl")
+    with zipfile.ZipFile(wheel, "a") as archive:
+        archive.writestr(name, b"")
+    good = _wheel(tmp_path / "good.whl")
+    with pytest.raises(WheelPayloadMismatch, match="unsafe"):
+        compare_wheel_payloads(good, wheel)
