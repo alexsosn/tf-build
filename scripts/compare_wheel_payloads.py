@@ -18,7 +18,10 @@ _DIST_INFO = re.compile(r"tf_build-[^/]+\.dist-info\Z")
 _CHUNK = 1024 * 1024
 _MAX_RUNTIME_METADATA = 1024 * 1024
 _MAX_ENTRY_POINTS = 64 * 1024
+_MAX_WHEEL_METADATA = 64 * 1024
 _RUNTIME_FIELDS = ("Name", "Version", "Requires-Python", "Requires-Dist", "Provides-Extra")
+_WHEEL_VERSION = re.compile(r"1\.[0-9]+\Z")
+_WHEEL_TAG = re.compile(r"[A-Za-z0-9_.]+-[A-Za-z0-9_.]+-[A-Za-z0-9_.]+\Z")
 
 
 class WheelPayloadMismatch(ValueError):
@@ -113,9 +116,42 @@ def _read_bounded(archive: zipfile.ZipFile, name: str, limit: int) -> bytes:
     return data
 
 
+
+def _wheel_install_contract(raw: bytes) -> tuple[str, str, tuple[str, ...], str | None]:
+    """Read WHEEL install compatibility without executing candidate distribution code."""
+    metadata = BytesParser().parsebytes(raw)
+    if metadata.defects:
+        raise WheelPayloadMismatch("WHEEL has malformed metadata headers")
+
+    def exactly_one(field: str) -> str:
+        values = metadata.get_all(field) or ()
+        if len(values) != 1 or not str(values[0]).strip():
+            raise WheelPayloadMismatch(f"WHEEL requires exactly one nonempty {field}")
+        return str(values[0]).strip()
+
+    version = exactly_one("Wheel-Version")
+    if _WHEEL_VERSION.fullmatch(version) is None:
+        raise WheelPayloadMismatch("WHEEL has unsupported Wheel-Version major or syntax")
+
+    purelib = exactly_one("Root-Is-Purelib")
+    if purelib not in {"true", "false"}:
+        raise WheelPayloadMismatch("WHEEL has invalid Root-Is-Purelib value")
+
+    raw_tags = metadata.get_all("Tag") or ()
+    tags = tuple(sorted(str(tag).strip() for tag in raw_tags))
+    if not tags or any(_WHEEL_TAG.fullmatch(tag) is None for tag in tags):
+        raise WheelPayloadMismatch("WHEEL requires valid nonempty compatibility Tag")
+
+    builds = metadata.get_all("Build") or ()
+    if len(builds) > 1 or (builds and not str(builds[0]).strip()):
+        raise WheelPayloadMismatch("WHEEL has ambiguous Build value")
+    build = str(builds[0]).strip() if builds else None
+    return version, purelib, tags, build
+
+
 def _runtime_contract(
     wheel: Path,
-) -> tuple[tuple[tuple[str, tuple[str, ...]], ...], bytes | None]:
+) -> tuple[tuple[tuple[str, tuple[str, ...]], ...], bytes | None, tuple[str, str, tuple[str, ...], str | None]]:
     """Compare install-relevant metadata while permitting generated metadata drift."""
     try:
         with zipfile.ZipFile(wheel) as archive:
@@ -132,6 +168,10 @@ def _runtime_contract(
             if metadata_path not in names:
                 raise WheelPayloadMismatch("wheel lacks runtime METADATA")
             raw = _read_bounded(archive, metadata_path, _MAX_RUNTIME_METADATA)
+            wheel_path = f"{root}/WHEEL"
+            if wheel_path not in names:
+                raise WheelPayloadMismatch("wheel lacks required WHEEL installation metadata")
+            wheel_headers = _read_bounded(archive, wheel_path, _MAX_WHEEL_METADATA)
             entry_path = f"{root}/entry_points.txt"
             entry_points = (
                 _read_bounded(archive, entry_path, _MAX_ENTRY_POINTS)
@@ -157,7 +197,7 @@ def _runtime_contract(
         if any(not value for value in normalized):
             raise WheelPayloadMismatch(f"wheel runtime metadata has empty {key}")
         fields.append((key, normalized))
-    return tuple(fields), entry_points
+    return tuple(fields), entry_points, _wheel_install_contract(wheel_headers)
 
 
 def compare_wheel_payloads(direct: Path, rebuilt: Path) -> tuple[str, ...]:
