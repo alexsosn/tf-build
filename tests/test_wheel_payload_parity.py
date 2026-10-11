@@ -291,3 +291,23 @@ def test_runtime_metadata_header_order_does_not_change_contract(tmp_path: Path) 
         ),
     )
     assert compare_wheel_payloads(direct, rebuilt)
+
+
+def test_runtime_header_quoted_whitespace_cannot_be_normalized_away(
+    tmp_path: Path,
+) -> None:
+    requirement = b"Requires-Dist: text-fabric<14,>=13.1"
+    direct = _wheel(
+        tmp_path / "direct.whl",
+        metadata=_RUNTIME_METADATA.replace(
+            requirement, requirement + b"; platform_machine == 'foo  bar'"
+        ),
+    )
+    rebuilt = _wheel(
+        tmp_path / "rebuilt.whl",
+        metadata=_RUNTIME_METADATA.replace(
+            requirement, requirement + b"; platform_machine == 'foo bar'"
+        ),
+    )
+    with pytest.raises(WheelPayloadMismatch, match="metadata|contract"):
+        compare_wheel_payloads(direct, rebuilt)
