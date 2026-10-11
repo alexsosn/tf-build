@@ -1,0 +1,8 @@
+# Plan: descriptor-anchored artifact fingerprint walker (#84)
+
+1. Commit this research and plan before a behavior-changing edit.
+2. RED-first: extend `tests/test_fingerprint.py` with POSIX real symlink-swap at the existing recursive `os.scandir(nested_path)` boundary; require `FingerprintError` instead of recording external files. Record failing CI before production implementation. Stable nested fingerprint oracle remains green.
+3. POSIX implementation: refactor the private tree walker to pin each directory inode with `O_RDONLY|O_DIRECTORY|O_NOFOLLOW`, use `os.scandir(fd)` and child opens with `dir_fd=parent_fd`, hash files while parent fd is live, and check inode consistency of opened directories/files where practical. Preserve existing error families; exclude `.tf` dirs; preserve manifest exclusions and sort final `FileFingerprint` records by UTF-8 path.
+4. Non-POSIX: keep existing path-based behavior without overpromising atomic symlink avoidance; production module must continue importing and running on Python 3.11+ Windows. Document limitation. Avoid a second whole-tree pass.
+5. Run the entire matrix of tests/lint/type checks (3.11–3.14) and wheel/sdist parity, installed-wheel/offline wheelhouse on frozen head. Revisit any RED test whose injection mechanism no longer applies and ensure it still attacks the new code path, with new anchored-race assertions as needed.
+6. Logically independent adversarial review on frozen code, actual POSIX fixtures, descriptor cleanup, directory closure, existing digest and CI evidence; GitHub review COMMENT anchored to head. Merge only when all checks green, no release/tag publication.
