@@ -15,11 +15,21 @@ from scripts.compare_wheel_payloads import (
 )
 
 
+_RUNTIME_METADATA = (
+    b"Metadata-Version: 2.3\n"
+    b"Name: tf-build\n"
+    b"Version: 0.1.0rc1\n"
+    b"Requires-Python: >=3.11\n"
+    b"Requires-Dist: text-fabric<14,>=13.1\n"
+    b"Provides-Extra: dev\n"
+    b"Summary: direct wheel\n"
+)
+
 def _wheel(
     path: Path,
     *,
     modules: dict[str, bytes] | None = None,
-    metadata: bytes = b"original metadata",
+    metadata: bytes | None = _RUNTIME_METADATA,
     extra: tuple[str, bytes] | None = None,
     symlink: bool = False,
 ) -> Path:
@@ -35,7 +45,8 @@ def _wheel(
             if symlink and name == "tf_build/source.py":
                 member.external_attr = (stat.S_IFLNK | 0o777) << 16
             archive.writestr(member, data)
-        archive.writestr("tf_build-0.1.0rc1.dist-info/METADATA", metadata)
+        if metadata is not None:
+            archive.writestr("tf_build-0.1.0rc1.dist-info/METADATA", metadata)
         if extra is not None:
             archive.writestr(*extra)
     return path
@@ -45,7 +56,7 @@ def test_identical_package_files_ignore_wheel_metadata_and_container_differences
     tmp_path: Path,
 ) -> None:
     direct = _wheel(tmp_path / "direct.whl")
-    rebuilt = _wheel(tmp_path / "rebuilt.whl", metadata=b"rebuilt metadata")
+    rebuilt = _wheel(tmp_path / "rebuilt.whl", metadata=_RUNTIME_METADATA.replace(b"direct wheel", b"rebuilt wheel"))
     assert compare_wheel_payloads(direct, rebuilt) == (
         "tf_build/__init__.py",
         "tf_build/nested/helper.py",
@@ -211,3 +222,70 @@ def test_reject_ambiguous_repeated_trailing_slashes(
     good = _wheel(tmp_path / "good.whl")
     with pytest.raises(WheelPayloadMismatch, match="unsafe"):
         compare_wheel_payloads(good, wheel)
+
+
+@pytest.mark.parametrize(
+    "old,new",
+    [
+        (b"Requires-Python: >=3.11", b"Requires-Python: >=3.12"),
+        (b"Requires-Dist: text-fabric<14,>=13.1", b"Requires-Dist: text-fabric>=14"),
+        (b"Provides-Extra: dev", b"Provides-Extra: testing"),
+        (b"Name: tf-build", b"Name: other-package"),
+        (b"Version: 0.1.0rc1", b"Version: 0.1.0rc2"),
+    ],
+)
+def test_identical_code_with_different_runtime_metadata_must_fail(
+    tmp_path: Path, old: bytes, new: bytes
+) -> None:
+    direct = _wheel(tmp_path / "direct.whl")
+    rebuilt = _wheel(
+        tmp_path / "rebuilt.whl",
+        metadata=_RUNTIME_METADATA.replace(old, new),
+    )
+    with pytest.raises(WheelPayloadMismatch, match="metadata|contract"):
+        compare_wheel_payloads(direct, rebuilt)
+
+
+@pytest.mark.parametrize(
+    "malformed",
+    [
+        None,
+        b"Metadata-Version: 2.3\nName: tf-build\n",
+        _RUNTIME_METADATA + b"Name: tf-build\n",
+    ],
+)
+def test_missing_or_ambiguous_runtime_metadata_fails(
+    tmp_path: Path, malformed: bytes | None
+) -> None:
+    direct = _wheel(tmp_path / "direct.whl")
+    rebuilt = _wheel(tmp_path / "rebuilt.whl", metadata=malformed)
+    with pytest.raises(WheelPayloadMismatch, match="metadata|contract"):
+        compare_wheel_payloads(direct, rebuilt)
+
+
+def test_entry_points_payload_affects_installed_contract(tmp_path: Path) -> None:
+    direct = _wheel(tmp_path / "direct.whl")
+    rebuilt = _wheel(
+        tmp_path / "rebuilt.whl",
+        extra=("tf_build-0.1.0rc1.dist-info/entry_points.txt",
+               b"[console_scripts]\ntf-build=tf_build.cli:main\n"),
+    )
+    with pytest.raises(WheelPayloadMismatch, match="entry|metadata|contract"):
+        compare_wheel_payloads(direct, rebuilt)
+
+
+def test_runtime_metadata_header_order_does_not_change_contract(tmp_path: Path) -> None:
+    direct = _wheel(tmp_path / "direct.whl")
+    rebuilt = _wheel(
+        tmp_path / "rebuilt.whl",
+        metadata=(
+            b"Summary: rebuilt wheel\n"
+            b"Provides-Extra: dev\n"
+            b"Requires-Dist: text-fabric<14,>=13.1\n"
+            b"Version: 0.1.0rc1\n"
+            b"Requires-Python: >=3.11\n"
+            b"Name: tf-build\n"
+            b"Metadata-Version: 2.3\n"
+        ),
+    )
+    assert compare_wheel_payloads(direct, rebuilt)
