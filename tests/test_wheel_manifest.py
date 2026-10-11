@@ -12,7 +12,9 @@ from pathlib import Path
 
 import pytest
 
+import scripts.wheel_manifest as manifest_module
 from scripts.wheel_manifest import (
+    _identity,
     WheelManifestError,
     build_wheel_manifest,
     write_wheel_manifest,
@@ -391,3 +393,69 @@ def test_sdist_manifest_preserves_explicit_file_directory_alias_rejection(
             wheels, project, "a" * 40,
             sdist_dir=sdist.parent, release_tag="v0.1.0rc1",
         )
+
+
+@pytest.mark.skipif(
+    not hasattr(__import__("os"), "O_NOFOLLOW"),
+    reason="POSIX nofollow semantics are required for symlink race test",
+)
+def test_manifest_identity_rejects_symlink_swap_after_preflight(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    candidate = tmp_path / "candidate.whl"
+    candidate.write_bytes(b"approved-release-wheel")
+    outside = tmp_path / "outside"
+    outside.write_bytes(b"other-data-must-not-be-hashed")
+    moved = tmp_path / "original"
+    original_is_file = Path.is_file
+    swapped = False
+
+    def replace_when_checked(path: Path) -> bool:
+        nonlocal swapped
+        regular = original_is_file(path)
+        if path == candidate and regular and not swapped:
+            candidate.rename(moved)
+            candidate.symlink_to(outside)
+            swapped = True
+        return regular
+
+    monkeypatch.setattr(Path, "is_file", replace_when_checked)
+    with pytest.raises(WheelManifestError, match="regular|changed|open|identity"):
+        _identity(candidate)
+    assert swapped
+    assert candidate.is_symlink()
+    assert moved.read_bytes() == b"approved-release-wheel"
+
+
+def test_manifest_identity_rejects_same_size_inode_swap_during_hash(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    candidate = tmp_path / "candidate.whl"
+    before = b"A" * 4096
+    after = b"B" * len(before)
+    candidate.write_bytes(before)
+    moved = tmp_path / "original"
+    native_sha256 = hashlib.sha256
+    swapped = False
+
+    class SwapAfterDigestUpdate:
+        def __init__(self) -> None:
+            self._digest = native_sha256()
+
+        def update(self, chunk: bytes) -> None:
+            nonlocal swapped
+            self._digest.update(chunk)
+            if not swapped:
+                candidate.rename(moved)
+                candidate.write_bytes(after)
+                swapped = True
+
+        def hexdigest(self) -> str:
+            return self._digest.hexdigest()
+
+    monkeypatch.setattr(manifest_module.hashlib, "sha256", SwapAfterDigestUpdate)
+    with pytest.raises(WheelManifestError, match="changed|identity|stable|regular"):
+        _identity(candidate)
+    assert swapped
+    assert moved.read_bytes() == before
+    assert candidate.read_bytes() == after
