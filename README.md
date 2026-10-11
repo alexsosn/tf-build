@@ -353,6 +353,25 @@ It is a toy corpus, not an Agora host integration or a scholarly validation
 claim; see `tests/test_publication_smoke.py` for the fail-closed corruption
 and non-clobber checks.
 
+## CI wheel provenance and offline-install smoke
+
+The distribution CI job builds a noneditable tf-build wheel and runs a separate
+installation from a locally prepared wheelhouse with `pip --no-index`. A
+temporary **30-day GitHub Actions artifact** includes the tested wheel,
+resolved dependency wheels and `wheel-manifest.json`, which records the source
+checkout's full Git SHA, project/wheel version, wheel-byte SHA-256 and a
+SHA-256 inventory of the wheelhouse. The manifest is computed from the actual
+wheel ZIP and embedded `METADATA`, not merely its filename. PR builds check out
+the literal PR head for wheel provenance rather than the synthetic merge SHA.
+
+These are **development artifacts**, not signed attestations, frozen
+cross-platform dependency locks, permanent download URLs, or a published
+versioned release. The online CI job acquires dependencies *before* the
+offline smoke; a successful offline installation proves only that the
+prepared wheelhouse is sufficient for that runner/platform. Consumers must
+verify the manifest hashes after downloading and continue to use immutable
+source pins until a durable versioned release with dependency locking exists.
+
 ## Development
 
 Python 3.11+ is the initial supported runtime. Text-Fabric 13.x is the initial compatibility target.
