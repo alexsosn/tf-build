@@ -165,16 +165,30 @@ def test_fifo_swap_between_scandir_and_open_never_blocks(
     native_open = os.open
     swapped = False
 
-    def intercepted_open(path: str | os.PathLike[str], flags: int, mode: int = 0o777) -> int:
+    def intercepted_open(
+        path: str | os.PathLike[str],
+        flags: int,
+        mode: int = 0o777,
+        *,
+        dir_fd: int | None = None,
+    ) -> int:
         nonlocal swapped
-        if Path(path) == victim:
-            # This assertion makes the old version fail promptly: never create
-            # a FIFO and then invoke a blocking open as part of a RED test.
+        at_victim = Path(path) == victim or (
+            dir_fd is not None
+            and os.fstat(dir_fd).st_ino == root.stat().st_ino
+            and Path(path).name == victim.name
+        )
+        if at_victim:
+            # Both absolute and fd-relative source opens must be nonblocking.
             assert flags & os.O_NONBLOCK, "regular-file open must be nonblocking"
             victim.unlink()
             os.mkfifo(victim)
             swapped = True
-        return native_open(path, flags, mode)
+        return (
+            native_open(path, flags, mode, dir_fd=dir_fd)
+            if dir_fd is not None
+            else native_open(path, flags, mode)
+        )
 
     monkeypatch.setattr("tf_build.fingerprint.os.open", intercepted_open)
 
