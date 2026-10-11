@@ -1,0 +1,7 @@
+# Plan: race-aware manifest input SHA256 (#78)
+
+1. Commit research and plan before any test/production change. Preserve current manifest schema and normal-file SHA256/byte size.
+2. RED first: add deterministic real-filesystem regressions to `tests/test_wheel_manifest.py` exercising the private `_identity` entrypoint directly: (a) replace the originally regular candidate with a symlink at the preflight/open boundary, (b) replace candidate pathname with same-sized different regular bytes during the hash update. Assert rejection rather than a mismatched manifest. The tests should use actual files/symlinks, not mock `_identity`; run CI on tests-only SHA to record failing pytest evidence.
+3. Implementation: keep preflight, open read-only with `O_NOFOLLOW|O_NONBLOCK` on POSIX, verify `S_ISREG` of the opened FD, hash chunked stream and count bytes, require stable pre/post FD metadata, and compare post-read `lstat` inode/file type/size to the FD. Map expected OS failures to `WheelManifestError`. Preserve digest and size for stable artifacts.
+4. Run all matrix checks, real wheel + emitted sdist parity, clean venv and no-index wheelhouse on exact final head. Review all altered files independently with special scrutiny of FD cleanup, hardlinks, in-place mutation, Windows fallback and race claims; post COMMENT review anchored to frozen SHA.
+5. Merge only after every relevant job passes and adversarial review clears; no release/tag or ORAEC migration.
