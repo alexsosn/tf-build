@@ -389,6 +389,9 @@ workflow additionally compare **every shipped `tf_build/` file** in the direct
 wheel against its sdist-rebuilt counterpart, by path and decompressed SHA256.
 Generated `.dist-info/`, ZIP timestamps and compression can differ, but
 missing, added or byte-divergent package modules fail the gate before release.
+The ZIP inspection also rejects colliding file/directory paths, file ancestors
+of nested members, duplicate entries and noncanonical repeated terminal path
+separators (including within `.dist-info/`) without extracting the archives.
 This is package-payload parity, not proof of byte-identical wheel archives,
 semantic correctness, signed provenance or locked dependencies.
 
