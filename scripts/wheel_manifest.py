@@ -41,6 +41,21 @@ _RELEASE_VERSION = re.compile(r"\d+\.\d+\.\d+(?:(?:a|b|rc)\d+)?\Z")
 _MAX_METADATA_BYTES = 1024 * 1024
 
 
+def _check_package_identity(payload: bytes, name: str, version: str, source: str) -> None:
+    """Reject malformed or ambiguous required Core Metadata identity headers."""
+    metadata = BytesParser().parsebytes(payload)
+    if metadata.defects:
+        raise WheelManifestError(f"{source} metadata has malformed headers")
+    for field in ("Metadata-Version", "Name", "Version"):
+        values = metadata.get_all(field) or ()
+        if len(values) != 1 or not str(values[0]).strip():
+            raise WheelManifestError(f"{source} metadata requires exactly one {field}")
+        if field == "Name" and str(values[0]).strip() != name:
+            raise WheelManifestError(f"{source} metadata Name disagrees with project")
+        if field == "Version" and str(values[0]).strip() != version:
+            raise WheelManifestError(f"{source} metadata Version disagrees with project")
+
+
 def _sdist_identity(sdist_dir: Path, name: str, version: str) -> dict[str, str | int]:
     sdists = sorted(sdist_dir.glob("*.tar.gz"))
     if len(sdists) != 1:
@@ -78,9 +93,7 @@ def _sdist_identity(sdist_dir: Path, name: str, version: str) -> dict[str, str |
                         payload = stream.read(_MAX_METADATA_BYTES + 1)
                     if len(payload) > _MAX_METADATA_BYTES:
                         raise WheelManifestError("sdist metadata exceeds limit")
-                    metadata = BytesParser().parsebytes(payload)
-                    if metadata.get("Name") != name or metadata.get("Version") != version:
-                        raise WheelManifestError("sdist embedded metadata does not match project")
+                    _check_package_identity(payload, name, version, "sdist")
                     found_meta = True
     except (OSError, tarfile.TarError, EOFError) as exc:
         raise WheelManifestError("sdist source distribution cannot be inspected") from exc
@@ -135,9 +148,14 @@ def build_wheel_manifest(
             ]
             if meta_paths != [metadata_path]:
                 raise WheelManifestError("wheel embedded metadata path is ambiguous")
-            metadata = BytesParser().parsebytes(archive.read(metadata_path))
-            if metadata.get("Name") != name or metadata.get("Version") != version:
-                raise WheelManifestError("wheel metadata disagrees with pyproject")
+            member = archive.getinfo(metadata_path)
+            if member.file_size > _MAX_METADATA_BYTES:
+                raise WheelManifestError("wheel metadata exceeds size limit")
+            with archive.open(member) as stream:
+                metadata_bytes = stream.read(_MAX_METADATA_BYTES + 1)
+            if len(metadata_bytes) > _MAX_METADATA_BYTES:
+                raise WheelManifestError("wheel metadata exceeds size limit")
+            _check_package_identity(metadata_bytes, name, version, "wheel")
     except (OSError, zipfile.BadZipFile, RuntimeError, KeyError) as exc:
         raise WheelManifestError("wheel ZIP/metadata cannot be inspected") from exc
 
