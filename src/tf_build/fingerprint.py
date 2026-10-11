@@ -91,7 +91,9 @@ def _files(root: Path, manifest: str | None) -> list[tuple[str, Path]]:
     return files
 
 
-def _file_identity(name: str, path: Path) -> FileFingerprint:
+def _file_identity(
+    name: str, path: Path, *, directory_fd: int | None = None
+) -> FileFingerprint:
     # O_NOFOLLOW protects the final path component on supporting platforms.
     # A regular file can be swapped for a FIFO after scandir; on POSIX a
     # blocking read-only open would hang before fstat could reject the FIFO.
@@ -102,7 +104,11 @@ def _file_identity(name: str, path: Path) -> FileFingerprint:
             raise FingerprintError("POSIX nonblocking file open is unavailable")
         flags |= nonblocking
     try:
-        fd = os.open(path, flags)
+        fd = (
+            os.open(path.name, flags, dir_fd=directory_fd)
+            if directory_fd is not None
+            else os.open(path, flags)
+        )
     except OSError as exc:
         raise FingerprintError(f"cannot open regular artifact file {name}") from exc
 
@@ -131,7 +137,11 @@ def _file_identity(name: str, path: Path) -> FileFingerprint:
                 raise FingerprintError(f"artifact file changed during hashing: {name}")
         # An open file can remain unchanged after its pathname is replaced.
         # Confirm the current artifact still names the bytes just hashed.
-        current = path.lstat()
+        current = (
+            os.stat(path.name, dir_fd=directory_fd, follow_symlinks=False)
+            if directory_fd is not None
+            else path.lstat()
+        )
         if (
             not stat.S_ISREG(current.st_mode)
             or (
@@ -154,6 +164,113 @@ def _file_identity(name: str, path: Path) -> FileFingerprint:
     )
 
 
+def _anchored_files(root: Path, manifest: str | None) -> list[FileFingerprint]:
+    """Fingerprint a POSIX artifact below nofollow-pinned directory descriptors."""
+    nofollow = getattr(os, "O_NOFOLLOW", None)
+    directory_flag = getattr(os, "O_DIRECTORY", None)
+    if nofollow is None or directory_flag is None:
+        raise FingerprintError("POSIX nofollow directory traversal is unavailable")
+    flags = os.O_RDONLY | nofollow | directory_flag | getattr(os, "O_CLOEXEC", 0)
+    records: list[FileFingerprint] = []
+
+    def walk(directory_fd: int, prefix: str) -> None:
+        try:
+            with os.scandir(directory_fd) as entries:
+                candidates = list(entries)
+        except OSError as exc:
+            raise FingerprintError(
+                f"cannot enumerate artifact directory {prefix or root}"
+            ) from exc
+
+        for item in candidates:
+            relative = f"{prefix}/{item.name}" if prefix else item.name
+            try:
+                if item.is_symlink():
+                    raise FingerprintError(f"artifact contains symlink: {relative}")
+                if item.is_dir(follow_symlinks=False):
+                    if relative == manifest:
+                        raise FingerprintError(
+                            f"manifest exclusion names an artifact directory: {relative}"
+                        )
+                    if item.name == ".tf":
+                        continue
+                    try:
+                        child_fd = os.open(item.name, flags, dir_fd=directory_fd)
+                    except OSError as exc:
+                        raise FingerprintError(
+                            f"cannot open regular artifact directory: {relative}"
+                        ) from exc
+                    try:
+                        first = os.fstat(child_fd)
+                        if not stat.S_ISDIR(first.st_mode):
+                            raise FingerprintError(
+                                f"artifact directory became non-directory: {relative}"
+                            )
+                        walk(child_fd, relative)
+                        last = os.fstat(child_fd)
+                        current = os.stat(
+                            item.name, dir_fd=directory_fd, follow_symlinks=False
+                        )
+                        if (
+                            not stat.S_ISDIR(current.st_mode)
+                            or (first.st_dev, first.st_ino)
+                            != (last.st_dev, last.st_ino)
+                            or (current.st_dev, current.st_ino)
+                            != (last.st_dev, last.st_ino)
+                        ):
+                            raise FingerprintError(
+                                f"artifact directory changed during scan: {relative}"
+                            )
+                    finally:
+                        os.close(child_fd)
+                elif item.is_file(follow_symlinks=False):
+                    if relative != manifest:
+                        records.append(
+                            _file_identity(
+                                relative, Path(item.name), directory_fd=directory_fd
+                            )
+                        )
+                else:
+                    raise FingerprintError(
+                        f"artifact contains non-regular entry: {relative}"
+                    )
+            except OSError as exc:
+                raise FingerprintError(
+                    f"cannot inspect artifact entry {relative}"
+                ) from exc
+
+    try:
+        root_fd = os.open(root, flags)
+    except OSError as exc:
+        raise FingerprintError(f"cannot open artifact directory {root}") from exc
+    try:
+        first_root = os.fstat(root_fd)
+        if not stat.S_ISDIR(first_root.st_mode):
+            raise FingerprintError(f"artifact root is not a directory: {root}")
+        walk(root_fd, "")
+        last_root = os.fstat(root_fd)
+        current_root = root.lstat()
+        if (
+            not stat.S_ISDIR(current_root.st_mode)
+            or (first_root.st_dev, first_root.st_ino)
+            != (last_root.st_dev, last_root.st_ino)
+            or (current_root.st_dev, current_root.st_ino)
+            != (last_root.st_dev, last_root.st_ino)
+        ):
+            raise FingerprintError(f"artifact root changed during scan: {root}")
+    except OSError as exc:
+        raise FingerprintError(f"cannot inspect artifact root {root}") from exc
+    finally:
+        os.close(root_fd)
+    try:
+        records.sort(key=lambda item: item.path.encode("utf-8"))
+    except UnicodeEncodeError as exc:
+        raise FingerprintError(
+            "artifact contains a filename not representable as UTF-8"
+        ) from exc
+    return records
+
+
 def fingerprint_tree(
     root: str | Path,
     *,
@@ -172,7 +289,11 @@ def fingerprint_tree(
     if not directory.is_dir():
         raise FingerprintError(f"artifact root is not a directory: {directory}")
 
-    records = tuple(_file_identity(name, path) for name, path in _files(directory, manifest))
+    records = (
+        tuple(_anchored_files(directory, manifest))
+        if os.name == "posix"
+        else tuple(_file_identity(name, path) for name, path in _files(directory, manifest))
+    )
     aggregate = hashlib.sha256()
     aggregate.update(_PREFIX)
     for item in records:

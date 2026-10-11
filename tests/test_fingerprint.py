@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import os
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -164,16 +165,30 @@ def test_fifo_swap_between_scandir_and_open_never_blocks(
     native_open = os.open
     swapped = False
 
-    def intercepted_open(path: str | os.PathLike[str], flags: int, mode: int = 0o777) -> int:
+    def intercepted_open(
+        path: str | os.PathLike[str],
+        flags: int,
+        mode: int = 0o777,
+        *,
+        dir_fd: int | None = None,
+    ) -> int:
         nonlocal swapped
-        if Path(path) == victim:
-            # This assertion makes the old version fail promptly: never create
-            # a FIFO and then invoke a blocking open as part of a RED test.
+        at_victim = Path(path) == victim or (
+            dir_fd is not None
+            and os.fstat(dir_fd).st_ino == root.stat().st_ino
+            and Path(path).name == victim.name
+        )
+        if at_victim:
+            # Both absolute and fd-relative source opens must be nonblocking.
             assert flags & os.O_NONBLOCK, "regular-file open must be nonblocking"
             victim.unlink()
             os.mkfifo(victim)
             swapped = True
-        return native_open(path, flags, mode)
+        return (
+            native_open(path, flags, mode, dir_fd=dir_fd)
+            if dir_fd is not None
+            else native_open(path, flags, mode)
+        )
 
     monkeypatch.setattr("tf_build.fingerprint.os.open", intercepted_open)
 
@@ -258,3 +273,71 @@ def test_tree_fingerprint_rejects_file_mutation_during_hashing(
     if mutation == "rewrite-restore-mtime":
         assert feature.stat().st_mtime_ns == original_mtime_ns
         assert feature.stat().st_ctime_ns != original_ctime_ns
+
+
+@pytest.mark.skipif(
+    os.name != "posix" or not hasattr(os, "O_NOFOLLOW"),
+    reason="POSIX directory-entry replacement and nofollow semantics required",
+)
+def test_fingerprint_does_not_follow_nested_directory_swapped_after_classification(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _root(tmp_path)
+    nested = root / "nested"
+    nested.mkdir()
+    (nested / "otype.tf").write_bytes(b"legitimate-data")
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "secret.tf").write_bytes(b"external-secret-do-not-read")
+    parked = tmp_path / "parked-nested"
+    native_scandir = os.scandir
+    swapped = False
+
+    class SwappingEntry:
+        def __init__(self, entry: os.DirEntry[str]) -> None:
+            self.entry = entry
+            self.name = entry.name
+            self.path = entry.path
+
+        def is_symlink(self) -> bool:
+            return self.entry.is_symlink()
+
+        def is_dir(self, *, follow_symlinks: bool = True) -> bool:
+            nonlocal swapped
+            was_directory = self.entry.is_dir(follow_symlinks=follow_symlinks)
+            if self.name == "nested" and was_directory and not swapped:
+                nested.rename(parked)
+                nested.symlink_to(outside, target_is_directory=True)
+                swapped = True
+            return was_directory
+
+        def is_file(self, *, follow_symlinks: bool = True) -> bool:
+            return self.entry.is_file(follow_symlinks=follow_symlinks)
+
+    class ScanProxy:
+        def __init__(self, original: Any) -> None:
+            self.original = original
+
+        def __enter__(self) -> Any:
+            entries = self.original.__enter__()
+            return (SwappingEntry(item) for item in entries)
+
+        def __exit__(self, *args: Any) -> Any:
+            return self.original.__exit__(*args)
+
+    def swapping_scandir(path: Any) -> Any:
+        iterator = native_scandir(path)
+        if path == root or (
+            isinstance(path, int)
+            and os.fstat(path).st_ino == root.stat().st_ino
+            and os.fstat(path).st_dev == root.stat().st_dev
+        ):
+            return ScanProxy(iterator)
+        return iterator
+
+    monkeypatch.setattr("tf_build.fingerprint.os.scandir", swapping_scandir)
+    with pytest.raises(FingerprintError, match="symlink|directory|changed|cannot|regular"):
+        fingerprint_tree(root)
+    assert swapped
+    assert (nested / "secret.tf").read_bytes() == b"external-secret-do-not-read"
+    assert (parked / "otype.tf").read_bytes() == b"legitimate-data"
