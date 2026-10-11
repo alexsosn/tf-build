@@ -23,12 +23,20 @@ _RUNTIME_METADATA = (
     b"Provides-Extra: dev\n"
     b"Summary: direct wheel\n"
 )
+_WHEEL_HEADERS = (
+    b"Wheel-Version: 1.0\n"
+    b"Generator: build tool A\n"
+    b"Root-Is-Purelib: true\n"
+    b"Tag: py3-none-any\n"
+)
+
 
 def _wheel(
     path: Path,
     *,
     modules: dict[str, bytes] | None = None,
     metadata: bytes | None = _RUNTIME_METADATA,
+    wheel_headers: bytes | None = _WHEEL_HEADERS,
     extra: tuple[str, bytes] | None = None,
     symlink: bool = False,
 ) -> Path:
@@ -46,6 +54,8 @@ def _wheel(
             archive.writestr(member, data)
         if metadata is not None:
             archive.writestr("tf_build-0.1.0rc1.dist-info/METADATA", metadata)
+        if wheel_headers is not None:
+            archive.writestr("tf_build-0.1.0rc1.dist-info/WHEEL", wheel_headers)
         if extra is not None:
             archive.writestr(*extra)
     return path
@@ -311,3 +321,68 @@ def test_runtime_header_quoted_whitespace_cannot_be_normalized_away(
     )
     with pytest.raises(WheelPayloadMismatch, match="metadata|contract"):
         compare_wheel_payloads(direct, rebuilt)
+
+
+@pytest.mark.parametrize(
+    ("previous", "replacement"),
+    [
+        (b"Wheel-Version: 1.0", b"Wheel-Version: 2.0"),
+        (b"Root-Is-Purelib: true", b"Root-Is-Purelib: false"),
+        (b"Tag: py3-none-any", b"Tag: cp311-none-any"),
+        (b"Tag: py3-none-any", b"Tag: py3-none-any\nBuild: 1"),
+    ],
+)
+def test_installation_wheel_metadata_drift_is_rejected(
+    tmp_path: Path, previous: bytes, replacement: bytes
+) -> None:
+    direct = _wheel(tmp_path / "direct.whl")
+    rebuilt = _wheel(
+        tmp_path / "rebuilt.whl",
+        wheel_headers=_WHEEL_HEADERS.replace(previous, replacement),
+    )
+    with pytest.raises(WheelPayloadMismatch, match="WHEEL|wheel"):
+        compare_wheel_payloads(direct, rebuilt)
+
+
+@pytest.mark.parametrize(
+    "invalid",
+    [
+        None,
+        b"",
+        _WHEEL_HEADERS.replace(b"Wheel-Version: 1.0\n", b""),
+        _WHEEL_HEADERS.replace(b"Root-Is-Purelib: true\n", b""),
+        _WHEEL_HEADERS.replace(b"Tag: py3-none-any\n", b""),
+        _WHEEL_HEADERS.replace(b"Wheel-Version: 1.0", b"Wheel-Version: 2.0"),
+        _WHEEL_HEADERS.replace(b"Wheel-Version: 1.0", b"Wheel-Version: other"),
+        _WHEEL_HEADERS.replace(b"Root-Is-Purelib: true", b"Root-Is-Purelib: perhaps"),
+        _WHEEL_HEADERS + b"Root-Is-Purelib: true\n",
+        _WHEEL_HEADERS + b"Wheel-Version: 1.0\n",
+        _WHEEL_HEADERS + b"Build: 1\nBuild: 2\n",
+        _WHEEL_HEADERS.replace(b"Tag: py3-none-any", b"Tag:   "),
+    ],
+)
+def test_missing_or_malformed_wheel_installation_metadata_is_rejected(
+    tmp_path: Path, invalid: bytes | None
+) -> None:
+    direct = _wheel(tmp_path / "direct.whl")
+    rebuilt = _wheel(tmp_path / "rebuilt.whl", wheel_headers=invalid)
+    with pytest.raises(WheelPayloadMismatch, match="WHEEL|wheel"):
+        compare_wheel_payloads(direct, rebuilt)
+
+
+def test_wheel_generator_and_compatibility_tag_order_may_differ(tmp_path: Path) -> None:
+    direct = _wheel(
+        tmp_path / "direct.whl",
+        wheel_headers=_WHEEL_HEADERS + b"Tag: py2-none-any\n",
+    )
+    rebuilt = _wheel(
+        tmp_path / "rebuilt.whl",
+        wheel_headers=(
+            b"Tag: py2-none-any\n"
+            b"Root-Is-Purelib: true\n"
+            b"Generator: build tool B\n"
+            b"Wheel-Version: 1.0\n"
+            b"Tag: py3-none-any\n"
+        ),
+    )
+    assert compare_wheel_payloads(direct, rebuilt)
