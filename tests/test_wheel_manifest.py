@@ -243,3 +243,70 @@ def test_release_manifest_requires_sdist_when_a_release_tag_is_given(
     project, wheels, _ = _fixture(tmp_path, version="0.1.0rc1")
     with pytest.raises(WheelManifestError, match="sdist"):
         build_wheel_manifest(wheels, project, "a" * 40, release_tag="v0.1.0rc1")
+
+
+_VALID_WHEEL_META = (
+    b"Metadata-Version: 2.3\n"
+    b"Name: tf-build\n"
+    b"Version: 0.1.0.dev0\n"
+)
+_VALID_SDIST_META = _VALID_WHEEL_META.replace(b"0.1.0.dev0", b"0.1.0rc1")
+
+
+@pytest.mark.parametrize(
+    "invalid",
+    [
+        _VALID_WHEEL_META + b"Name: different-project\n",
+        _VALID_WHEEL_META + b"Version: 9.9.9\n",
+        _VALID_WHEEL_META + b"Metadata-Version: 2.4\n",
+        _VALID_WHEEL_META.replace(b"Metadata-Version: 2.3\n", b""),
+        _VALID_WHEEL_META.replace(b"Name: tf-build\n", b""),
+        _VALID_WHEEL_META.replace(b"Version: 0.1.0.dev0\n", b""),
+        _VALID_WHEEL_META + b"Broken-Header-Without-Colon\n",
+    ],
+)
+def test_wheel_manifest_rejects_ambiguous_required_metadata(
+    tmp_path: Path, invalid: bytes
+) -> None:
+    project, wheels, wheel = _fixture(tmp_path)
+    with zipfile.ZipFile(wheel, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("tf_build-0.1.0.dev0.dist-info/METADATA", invalid)
+    with pytest.raises(WheelManifestError, match="metadata|identity|ambiguous"):
+        build_wheel_manifest(wheels, project, "a" * 40)
+
+
+def test_manifest_bounds_compressed_wheel_metadata(tmp_path: Path) -> None:
+    project, wheels, wheel = _fixture(tmp_path)
+    huge = _VALID_WHEEL_META + b"Summary: " + b"x" * (1024 * 1024 + 1)
+    with zipfile.ZipFile(wheel, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("tf_build-0.1.0.dev0.dist-info/METADATA", huge)
+    assert wheel.stat().st_size < 10_000  # compressed bomb-like metadata
+    with pytest.raises(WheelManifestError, match="metadata|size|large|limit"):
+        build_wheel_manifest(wheels, project, "a" * 40)
+
+
+@pytest.mark.parametrize(
+    "invalid",
+    [
+        _VALID_SDIST_META + b"Name: different-project\n",
+        _VALID_SDIST_META + b"Version: 9.9.9\n",
+        _VALID_SDIST_META + b"Metadata-Version: 2.4\n",
+        _VALID_SDIST_META.replace(b"Metadata-Version: 2.3\n", b""),
+        _VALID_SDIST_META.replace(b"Name: tf-build\n", b""),
+        _VALID_SDIST_META.replace(b"Version: 0.1.0rc1\n", b""),
+        _VALID_SDIST_META + b"Broken-Header-Without-Colon\n",
+    ],
+)
+def test_sdist_manifest_rejects_ambiguous_required_metadata(
+    tmp_path: Path, invalid: bytes
+) -> None:
+    project, wheels, sdist = _sdist_fixture(tmp_path)
+    with tarfile.open(sdist, mode="w:gz") as tar:
+        member = tarfile.TarInfo("tf_build-0.1.0rc1/PKG-INFO")
+        member.size = len(invalid)
+        tar.addfile(member, io.BytesIO(invalid))
+    with pytest.raises(WheelManifestError, match="metadata|identity|ambiguous"):
+        build_wheel_manifest(
+            wheels, project, "a" * 40, sdist_dir=sdist.parent,
+            release_tag="v0.1.0rc1",
+        )
