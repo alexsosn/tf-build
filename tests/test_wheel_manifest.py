@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
+import tarfile
+import tomllib
 import zipfile
 from pathlib import Path
 
@@ -121,3 +124,122 @@ def test_wheelhouse_must_include_same_project_wheel(tmp_path: Path) -> None:
     warehouse.mkdir()
     with pytest.raises(WheelManifestError, match="wheelhouse"):
         build_wheel_manifest(wheels, project, "a" * 40, wheelhouse=warehouse)
+
+
+def _sdist_fixture(
+    tmp_path: Path,
+    *,
+    version: str = "0.1.0rc1",
+    metadata_version: str | None = None,
+    extra_name: str | None = None,
+    extra_kind: str = "file",
+) -> tuple[Path, Path, Path]:
+    project, wheels, _ = _fixture(tmp_path, version=version)
+    sdist_dir = tmp_path / "sdist"
+    sdist_dir.mkdir()
+    package_root = f"tf_build-{version}"
+    archive = sdist_dir / f"{package_root}.tar.gz"
+    metadata = (
+        "Metadata-Version: 2.3\nName: tf-build\n"
+        f"Version: {version if metadata_version is None else metadata_version}\n"
+    ).encode("utf-8")
+    with tarfile.open(archive, "w:gz") as tar:
+        info = tarfile.TarInfo(f"{package_root}/PKG-INFO")
+        info.size = len(metadata)
+        tar.addfile(info, io.BytesIO(metadata))
+        if extra_name is not None:
+            item = tarfile.TarInfo(extra_name)
+            if extra_kind == "symlink":
+                item.type = tarfile.SYMTYPE
+                item.linkname = "../escape"
+                tar.addfile(item)
+            else:
+                body = b"test data"
+                item.size = len(body)
+                tar.addfile(item, io.BytesIO(body))
+    return project, wheels, archive
+
+
+def test_release_candidate_version_is_distinct_from_mutable_development_build() -> None:
+    with (Path(__file__).parents[1] / "pyproject.toml").open("rb") as stream:
+        project = tomllib.load(stream)["project"]
+    assert project["version"] == "0.1.0rc1"
+
+
+def test_release_manifest_binds_both_wheel_and_sdist_and_full_git_sha(
+    tmp_path: Path,
+) -> None:
+    project, wheels, sdist = _sdist_fixture(tmp_path)
+    record = build_wheel_manifest(
+        wheels,
+        project,
+        "f" * 40,
+        sdist_dir=sdist.parent,
+        release_tag="v0.1.0rc1",
+    )
+    assert record["source_commit"] == "f" * 40
+    assert record["version"] == "0.1.0rc1"
+    assert record["release_tag"] == "v0.1.0rc1"
+    assert record["sdist"]["file"] == sdist.name
+    assert record["sdist"]["sha256"] == hashlib.sha256(sdist.read_bytes()).hexdigest()
+    assert record == build_wheel_manifest(
+        wheels, project, "f" * 40, sdist_dir=sdist.parent, release_tag="v0.1.0rc1"
+    )
+
+
+@pytest.mark.parametrize("tag", ["v0.1.0", "v0.1.0rc2", "main", "0.1.0rc1", ""])
+def test_release_manifest_rejects_nonmatching_or_ambiguous_tag(
+    tmp_path: Path, tag: str
+) -> None:
+    project, wheels, sdist = _sdist_fixture(tmp_path)
+    with pytest.raises(WheelManifestError, match="tag"):
+        build_wheel_manifest(
+            wheels, project, "a" * 40, sdist_dir=sdist.parent, release_tag=tag
+        )
+
+
+@pytest.mark.parametrize("failure", ["missing", "multiple", "wrong-metadata", "bad-tar"])
+def test_release_manifest_rejects_nonunique_or_corrupt_source_distribution(
+    tmp_path: Path, failure: str
+) -> None:
+    project, wheels, sdist = _sdist_fixture(
+        tmp_path, metadata_version="0.1.0" if failure == "wrong-metadata" else None
+    )
+    if failure == "missing":
+        sdist.unlink()
+    elif failure == "multiple":
+        (sdist.parent / "tf_build-0.1.0rc1-copy.tar.gz").write_bytes(sdist.read_bytes())
+    elif failure == "bad-tar":
+        sdist.write_bytes(b"bad gzip")
+    with pytest.raises(WheelManifestError, match="sdist|source distribution"):
+        build_wheel_manifest(
+            wheels, project, "a" * 40, sdist_dir=sdist.parent, release_tag="v0.1.0rc1"
+        )
+
+
+@pytest.mark.parametrize(
+    ("extra_name", "extra_kind"),
+    [
+        ("tf_build-0.1.0rc1/../../escape", "file"),
+        ("/absolute", "file"),
+        ("tf_build-0.1.0rc1/link", "symlink"),
+    ],
+)
+def test_release_manifest_rejects_malicious_archive_entries(
+    tmp_path: Path, extra_name: str, extra_kind: str
+) -> None:
+    project, wheels, sdist = _sdist_fixture(
+        tmp_path, extra_name=extra_name, extra_kind=extra_kind
+    )
+    with pytest.raises(WheelManifestError, match="sdist|source distribution"):
+        build_wheel_manifest(
+            wheels, project, "a" * 40, sdist_dir=sdist.parent, release_tag="v0.1.0rc1"
+        )
+
+
+def test_release_manifest_requires_sdist_when_a_release_tag_is_given(
+    tmp_path: Path,
+) -> None:
+    project, wheels, _ = _fixture(tmp_path, version="0.1.0rc1")
+    with pytest.raises(WheelManifestError, match="sdist"):
+        build_wheel_manifest(wheels, project, "a" * 40, release_tag="v0.1.0rc1")
