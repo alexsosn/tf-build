@@ -10,6 +10,6 @@ Existing `tests/test_source.py::_make_repo` already makes and commits actual Git
 
 ## Contract / compatibility
 
-Git line-oriented commands in this module delimit their output with a final LF, and `text=True` normalizes CRLF under subprocess decoding. Remove **exactly one final newline** via `.removesuffix("\\n")` rather than `.strip()`; do not trim path bytes, accidentally erase whitespace-only path/status content, convert subprocess semantics, or print credential-bearing locator arguments. NUL-delimited `ls-files -z` output intentionally has no LF suffix, so `.removesuffix` leaves it untouched. The existing error sanitization and timeout tests remain authoritative.
+Git line-oriented commands in this module delimit their output with a final LF, and `text=True` normalizes CRLF under subprocess decoding. Remove **exactly one final newline** via `.removesuffix("\n")` rather than `.strip()`; do not trim path bytes, accidentally erase whitespace-only path/status content, convert subprocess semantics, or print credential-bearing locator arguments. NUL-delimited `ls-files -z` output intentionally has no LF suffix, so `.removesuffix` leaves it untouched. The existing error sanitization and timeout tests remain authoritative.
 
 This is a narrow bug fix in generic source verification, not a corpus converter or source-acquisition rewrite. It must not cause a versioned release or ORAEC integration.
