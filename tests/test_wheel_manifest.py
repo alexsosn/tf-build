@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import os
 import tarfile
 import tomllib
 import zipfile
@@ -458,3 +459,67 @@ def test_manifest_identity_rejects_same_size_inode_swap_during_hash(
     assert swapped
     assert moved.read_bytes() == before
     assert candidate.read_bytes() == after
+
+
+@pytest.mark.skipif(os.name != "posix", reason="atomic replace of open archive requires POSIX")
+def test_wheel_manifest_rejects_replacement_after_embedded_metadata_inspection(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project, wheels, wheel = _fixture(tmp_path)
+    replacement = tmp_path / "unverified-wheel.tmp"
+    with zipfile.ZipFile(replacement, "w") as archive:
+        archive.writestr(
+            "tf_build-0.1.0.dev0.dist-info/METADATA",
+            "Metadata-Version: 2.3\nName: substituted-project\nVersion: 0.1.0.dev0\n",
+        )
+    original_check = manifest_module._check_package_identity
+    replaced = False
+
+    def swap_after_valid_metadata(payload: bytes, name: str, version: str, source: str) -> None:
+        nonlocal replaced
+        original_check(payload, name, version, source)
+        if source == "wheel" and not replaced:
+            os.replace(replacement, wheel)
+            replaced = True
+
+    monkeypatch.setattr(manifest_module, "_check_package_identity", swap_after_valid_metadata)
+    with pytest.raises(WheelManifestError, match="changed|identity|metadata|wheel"):
+        build_wheel_manifest(wheels, project, "a" * 40)
+    assert replaced
+    assert b"substituted-project" in zipfile.ZipFile(wheel).read(
+        "tf_build-0.1.0.dev0.dist-info/METADATA"
+    )
+
+
+@pytest.mark.skipif(os.name != "posix", reason="atomic replace of open archive requires POSIX")
+def test_sdist_manifest_rejects_replacement_after_embedded_metadata_inspection(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project, wheels, sdist = _sdist_fixture(tmp_path)
+    replacement = tmp_path / "unverified-source.tmp"
+    body = b"Metadata-Version: 2.3\nName: tf-build\nVersion: 99.99.99\n"
+    with tarfile.open(replacement, "w:gz") as tar:
+        member = tarfile.TarInfo("tf_build-0.1.0rc1/PKG-INFO")
+        member.size = len(body)
+        tar.addfile(member, io.BytesIO(body))
+    original_check = manifest_module._check_package_identity
+    replaced = False
+
+    def swap_after_valid_metadata(payload: bytes, name: str, version: str, source: str) -> None:
+        nonlocal replaced
+        original_check(payload, name, version, source)
+        if source == "sdist" and not replaced:
+            os.replace(replacement, sdist)
+            replaced = True
+
+    monkeypatch.setattr(manifest_module, "_check_package_identity", swap_after_valid_metadata)
+    with pytest.raises(WheelManifestError, match="changed|identity|metadata|sdist"):
+        build_wheel_manifest(
+            wheels, project, "a" * 40, sdist_dir=sdist.parent,
+            release_tag="v0.1.0rc1",
+        )
+    assert replaced
+    with tarfile.open(sdist, "r:gz") as tar:
+        meta = tar.extractfile("tf_build-0.1.0rc1/PKG-INFO")
+        assert meta is not None
+        assert b"99.99.99" in meta.read()
