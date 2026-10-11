@@ -59,6 +59,9 @@ jobs:
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/sdist-wheels"
           python -m pip wheel --no-deps --wheel-dir "$RUNNER_TEMP/sdist-wheels" "$RUNNER_TEMP"/sdist/tf_build-*.tar.gz
+          python "$GITHUB_WORKSPACE/scripts/compare_wheel_payloads.py" \
+            --direct-dir "$RUNNER_TEMP/wheels" \
+            --rebuilt-dir "$RUNNER_TEMP/sdist-wheels"
           python -m venv "$RUNNER_TEMP/sdist-wheel-venv"
           "$RUNNER_TEMP/sdist-wheel-venv/bin/python" -m pip install "$RUNNER_TEMP"/sdist-wheels/tf_build-*.whl
           cd "$RUNNER_TEMP"

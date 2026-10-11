@@ -384,7 +384,13 @@ sdist* and smoke-installs its public APIs in a fresh environment, alongside
 testing the direct release wheel and a prepared offline dependency wheelhouse.
 Rebuilding from the sdist may fetch PEP 517 build dependencies online; it is
 not itself an offline-source-build guarantee. The Linux CI wheelhouse is not
-a cross-platform dependency lock.
+a cross-platform dependency lock. Both distribution CI and the manual release
+workflow additionally compare **every shipped `tf_build/` file** in the direct
+wheel against its sdist-rebuilt counterpart, by path and decompressed SHA256.
+Generated `.dist-info/`, ZIP timestamps and compression can differ, but
+missing, added or byte-divergent package modules fail the gate before release.
+This is package-payload parity, not proof of byte-identical wheel archives,
+semantic correctness, signed provenance or locked dependencies.
 
 **Owner-controlled publication procedure** (only after final release approval):
 
