@@ -89,6 +89,23 @@ def test_verify_git_source_accepts_clean_sha1_checkout(tmp_path: Path) -> None:
     assert snapshot.object_format == "sha1"
 
 
+@pytest.mark.skipif(
+    os.name == "nt", reason="Windows cannot portably represent trailing-whitespace paths"
+)
+@pytest.mark.parametrize("suffix", ["  ", " \t"])
+def test_verify_git_source_preserves_significant_git_root_whitespace(
+    tmp_path: Path, suffix: str
+) -> None:
+    repo, revision = _make_repo(tmp_path)
+    renamed = tmp_path / f"source-root{suffix}"
+    repo.rename(renamed)
+
+    snapshot = verify_git_source(renamed, expected_revision=revision)
+    assert snapshot.path == renamed.resolve()
+    assert snapshot.repository_root == renamed.resolve()
+    assert snapshot.revision == revision
+
+
 def test_verify_git_source_accepts_clean_sha256_checkout(tmp_path: Path) -> None:
     try:
         repo, revision = _make_repo(tmp_path, object_format="sha256")
