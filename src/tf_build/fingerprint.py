@@ -91,7 +91,9 @@ def _files(root: Path, manifest: str | None) -> list[tuple[str, Path]]:
     return files
 
 
-def _file_identity(\n    name: str, path: Path, *, directory_fd: int | None = None\n) -> FileFingerprint:
+def _file_identity(
+    name: str, path: Path, *, directory_fd: int | None = None
+) -> FileFingerprint:
     # O_NOFOLLOW protects the final path component on supporting platforms.
     # A regular file can be swapped for a FIFO after scandir; on POSIX a
     # blocking read-only open would hang before fstat could reject the FIFO.
