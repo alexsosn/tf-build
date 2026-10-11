@@ -392,7 +392,8 @@ cross-platform dependency lock.
    workflow does not create, move or overwrite tags.
 3. Manually dispatch **Publish verified prerelease** from **main** with that
    tag and approve the release environment. It verifies tag ancestry and
-   version, retests the tagged source, builds and inspects wheel/sdist,
+   version, requires a successful main CI run on that exact tagged commit,
+   retests the tagged source, builds and inspects wheel/sdist,
    rechecks tag identity and publishes a prerelease without overwriting an
    existing release.
 4. Retrieve the real wheel, sdist and `wheel-manifest.json` release assets.
