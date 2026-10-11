@@ -27,6 +27,9 @@ def _package_payload(wheel: Path) -> dict[str, str]:
         raise WheelPayloadMismatch(f"wheel is not a regular file: {wheel.name}")
     files: dict[str, str] = {}
     entries: set[str] = set()
+    installed_paths: set[str] = set()
+    file_paths: set[str] = set()
+    directory_paths: set[str] = set()
     try:
         with zipfile.ZipFile(wheel) as archive:
             for member in archive.infolist():
@@ -37,13 +40,11 @@ def _package_payload(wheel: Path) -> dict[str, str]:
                     or name.startswith("/")
                     or "\\" in name
                     or "\x00" in name
+                    or name.endswith("//")
                     or any(part in {"", ".", ".."} for part in parts)
                     or (parts and ":" in parts[0])
                 ):
                     raise WheelPayloadMismatch(f"unsafe wheel ZIP entry: {name!r}")
-                if name in entries:
-                    raise WheelPayloadMismatch(f"duplicate wheel ZIP entry: {name!r}")
-                entries.add(name)
                 kind = stat.S_IFMT(member.external_attr >> 16)
                 if kind not in (0, stat.S_IFREG, stat.S_IFDIR):
                     raise WheelPayloadMismatch(f"nonregular wheel ZIP entry: {name!r}")
@@ -53,10 +54,33 @@ def _package_payload(wheel: Path) -> dict[str, str]:
                     parts[0] == "tf_build" or _DIST_INFO.fullmatch(parts[0])
                 ):
                     raise WheelPayloadMismatch(f"unexpected installed wheel path: {name!r}")
+                if not member.is_dir() and kind == stat.S_IFDIR:
+                    raise WheelPayloadMismatch(f"directory pretending to be a file: {name!r}")
+
+                # ZIP names can be distinct yet map to the same installed path.
+                # Track implicit parents as well as explicit directory records.
+                normalized = name.rstrip("/")
+                if name in entries:
+                    raise WheelPayloadMismatch(f"duplicate wheel ZIP entry: {name!r}")
+                entries.add(name)
+                if normalized in installed_paths:
+                    raise WheelPayloadMismatch(f"colliding wheel ZIP path: {name!r}")
+                installed_paths.add(normalized)
+                if any(
+                    "/".join(parts[:depth]) in file_paths
+                    for depth in range(1, len(parts))
+                ):
+                    raise WheelPayloadMismatch(f"file ancestor in wheel ZIP path: {name!r}")
+                if not member.is_dir() and normalized in directory_paths:
+                    raise WheelPayloadMismatch(f"file collides with wheel ZIP directory: {name!r}")
+                if member.is_dir():
+                    directory_paths.add(normalized)
+                else:
+                    file_paths.add(normalized)
+                for depth in range(1, len(parts)):
+                    directory_paths.add("/".join(parts[:depth]))
                 if member.is_dir():
                     continue
-                if kind == stat.S_IFDIR:
-                    raise WheelPayloadMismatch(f"directory pretending to be a file: {name!r}")
                 if parts[0] != "tf_build":
                     continue
                 if len(parts) < 2:

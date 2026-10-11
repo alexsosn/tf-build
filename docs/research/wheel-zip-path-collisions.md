@@ -1,0 +1,11 @@
+# Research: wheel ZIP path aliases and filesystem collisions (#66)
+
+Baseline: main `c3bb1c152af26506b120308e112efb7e3017d708`, immediately after direct/sdist package parity gate #64.
+
+`scripts/compare_wheel_payloads.py::_package_payload` validates each ZIP member's spelling and checks duplicate *raw* filenames, but excludes directory entries from its payload map. The ZIP convention uses a single trailing slash to identify a directory. Repeated trailing separators (for example `tf_build/nested//`) are also noncanonical; the old `rstrip("/")` parser erased this distinction. Consequently, `tf_build/source.py` (file) and `tf_build/source.py/` (directory) are distinct ZIP names but collide as a filesystem path. Likewise, `tf_build/nested` (file) collides with the implicit directory required by `tf_build/nested/helper.py` regardless of member order. The current checker accepts both shapes, so two equally malformed wheels could pass the parity gate without representing an unambiguous installed package. A similar collision is possible in `.dist-info/` entries even though their bytes are intentionally excluded from equality.
+
+This validator is a **non-extracting release guard**, not a ZIP installer. It must reject collisions rather than rely on the extraction order or platform-specific unpacking behavior. Existing smoke installs cannot substitute for static safety checking of arbitrary candidate wheels. No corpus semantics, TF API change, or third-party ZIP parser is needed.
+
+Validation must distinguish the normalized path of each explicit member (strip the one conventional terminal slash for directories) from implicit directories created by deeper entries. An explicit directory can coexist with its implicit directory and file descendants. An explicit *file* cannot itself be an ancestor of another entry. Reject either ordering. Test ordinary directory records, root package `tf_build/`, and nested module entries to avoid rejecting valid packaging. Preserve the strict single-wheel selection, path grammar, symlink, unexpected-root and full-byte comparison checks.
+
+Boundary: this ticket does not claim to solve case-insensitive filesystem aliases, 8.3 Windows names, malformed local ZIP header disagreements, or compression bombs. Those require separately scoped portability and resource policies if release evidence warrants them.
