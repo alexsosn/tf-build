@@ -210,3 +210,51 @@ def test_aggregate_hash_has_length_framed_domain_separated_oracle(tmp_path: Path
 
     assert result.digest == "sha256:" + expected
     assert result.files[0].size == 1
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX file swap and ctime semantics required")
+@pytest.mark.parametrize("mutation", ["rename", "rewrite-restore-mtime"])
+def test_tree_fingerprint_rejects_file_mutation_during_hashing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mutation: str
+) -> None:
+    root = _root(tmp_path)
+    feature = root / "otype.tf"
+    original = b"A" * 4096
+    replacement = b"B" * len(original)
+    feature.write_bytes(original)
+    old_ns = 1_700_000_000_123_456_789
+    os.utime(feature, ns=(old_ns, old_ns))
+    original_mtime_ns = feature.stat().st_mtime_ns
+    original_ctime_ns = feature.stat().st_ctime_ns
+    native_sha256 = hashlib.sha256
+    injected = False
+
+    class MutatingDigest:
+        def __init__(self) -> None:
+            self._digest = native_sha256()
+
+        def update(self, data: bytes) -> None:
+            nonlocal injected
+            self._digest.update(data)
+            if injected:
+                return
+            injected = True
+            if mutation == "rename":
+                new_feature = root / "substitute.tmp"
+                new_feature.write_bytes(replacement)
+                os.replace(new_feature, feature)
+            else:
+                feature.write_bytes(replacement)
+                os.utime(feature, ns=(old_ns, old_ns))
+
+        def hexdigest(self) -> str:
+            return self._digest.hexdigest()
+
+    monkeypatch.setattr(hashlib, "sha256", MutatingDigest)
+    with pytest.raises(FingerprintError, match="changed|replaced|regular"):
+        fingerprint_tree(root)
+    assert injected
+    assert feature.read_bytes() == replacement
+    if mutation == "rewrite-restore-mtime":
+        assert feature.stat().st_mtime_ns == original_mtime_ns
+        assert feature.stat().st_ctime_ns != original_ctime_ns
