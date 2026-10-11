@@ -14,7 +14,6 @@ from scripts.compare_wheel_payloads import (
     main,
 )
 
-
 _RUNTIME_METADATA = (
     b"Metadata-Version: 2.3\n"
     b"Name: tf-build\n"
@@ -56,7 +55,10 @@ def test_identical_package_files_ignore_wheel_metadata_and_container_differences
     tmp_path: Path,
 ) -> None:
     direct = _wheel(tmp_path / "direct.whl")
-    rebuilt = _wheel(tmp_path / "rebuilt.whl", metadata=_RUNTIME_METADATA.replace(b"direct wheel", b"rebuilt wheel"))
+    rebuilt = _wheel(
+        tmp_path / "rebuilt.whl",
+        metadata=_RUNTIME_METADATA.replace(b"direct wheel", b"rebuilt wheel"),
+    )
     assert compare_wheel_payloads(direct, rebuilt) == (
         "tf_build/__init__.py",
         "tf_build/nested/helper.py",
