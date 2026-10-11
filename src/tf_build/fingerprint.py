@@ -119,10 +119,31 @@ def _file_identity(name: str, path: Path) -> FileFingerprint:
             last = os.fstat(stream.fileno())
             if (
                 size != last.st_size
-                or (first.st_dev, first.st_ino, first.st_size, first.st_mtime_ns)
-                != (last.st_dev, last.st_ino, last.st_size, last.st_mtime_ns)
+                or (
+                    first.st_dev, first.st_ino, first.st_size,
+                    first.st_mtime_ns, first.st_ctime_ns,
+                )
+                != (
+                    last.st_dev, last.st_ino, last.st_size,
+                    last.st_mtime_ns, last.st_ctime_ns,
+                )
             ):
                 raise FingerprintError(f"artifact file changed during hashing: {name}")
+        # An open file can remain unchanged after its pathname is replaced.
+        # Confirm the current artifact still names the bytes just hashed.
+        current = path.lstat()
+        if (
+            not stat.S_ISREG(current.st_mode)
+            or (
+                current.st_dev, current.st_ino, current.st_size,
+                current.st_mtime_ns, current.st_ctime_ns,
+            )
+            != (
+                last.st_dev, last.st_ino, last.st_size,
+                last.st_mtime_ns, last.st_ctime_ns,
+            )
+        ):
+            raise FingerprintError(f"artifact file changed during hashing: {name}")
     except OSError as exc:
         raise FingerprintError(f"could not read artifact file {name}") from exc
 
