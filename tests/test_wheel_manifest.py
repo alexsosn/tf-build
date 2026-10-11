@@ -452,7 +452,7 @@ def test_manifest_identity_rejects_same_size_inode_swap_during_hash(
         def hexdigest(self) -> str:
             return self._digest.hexdigest()
 
-    monkeypatch.setattr(manifest_module.hashlib, "sha256", SwapAfterDigestUpdate)
+    monkeypatch.setattr(hashlib, "sha256", SwapAfterDigestUpdate)
     with pytest.raises(WheelManifestError, match="changed|identity|stable|regular"):
         manifest_module._identity(candidate)
     assert swapped
