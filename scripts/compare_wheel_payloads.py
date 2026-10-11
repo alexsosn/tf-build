@@ -27,6 +27,7 @@ def _package_payload(wheel: Path) -> dict[str, str]:
         raise WheelPayloadMismatch(f"wheel is not a regular file: {wheel.name}")
     files: dict[str, str] = {}
     entries: set[str] = set()
+    installed_paths: set[str] = set()
     file_paths: set[str] = set()
     directory_paths: set[str] = set()
     try:
@@ -39,6 +40,7 @@ def _package_payload(wheel: Path) -> dict[str, str]:
                     or name.startswith("/")
                     or "\\" in name
                     or "\x00" in name
+                    or name.endswith("//")
                     or any(part in {"", ".", ".."} for part in parts)
                     or (parts and ":" in parts[0])
                 ):
@@ -58,9 +60,12 @@ def _package_payload(wheel: Path) -> dict[str, str]:
                 # ZIP names can be distinct yet map to the same installed path.
                 # Track implicit parents as well as explicit directory records.
                 normalized = name.rstrip("/")
-                if normalized in entries:
+                if name in entries:
+                    raise WheelPayloadMismatch(f"duplicate wheel ZIP entry: {name!r}")
+                entries.add(name)
+                if normalized in installed_paths:
                     raise WheelPayloadMismatch(f"colliding wheel ZIP path: {name!r}")
-                entries.add(normalized)
+                installed_paths.add(normalized)
                 if any(
                     "/".join(parts[:depth]) in file_paths
                     for depth in range(1, len(parts))
