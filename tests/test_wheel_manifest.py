@@ -142,7 +142,7 @@ def _sdist_fixture(
     metadata = (
         "Metadata-Version: 2.3\nName: tf-build\n"
         f"Version: {version if metadata_version is None else metadata_version}\n"
-    ).encode("utf-8")
+    ).encode()
     with tarfile.open(archive, "w:gz") as tar:
         info = tarfile.TarInfo(f"{package_root}/PKG-INFO")
         info.size = len(metadata)
