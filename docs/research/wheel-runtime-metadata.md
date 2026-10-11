@@ -1,0 +1,11 @@
+# Research: direct/sdist wheel runtime metadata parity (#68)
+
+Baseline: main `acc7650034994d7731f735ef129c718a186bc067`. Both distribution CI and guarded release workflow build a direct project wheel and a separately rebuilt wheel from the emitted sdist. `compare_wheel_payloads.py` validates every `tf_build/` path and compares decompressed package hashes, but it skips all `.dist-info/` bytes. `wheel_manifest.py` checks Name/Version of the **direct** wheel and records archive digests; it does not inspect the rebuilt wheel's dependency/entrypoint contract.
+
+The wheel's `METADATA` fields `Name`, `Version`, `Requires-Python`, `Requires-Dist` and `Provides-Extra` affect pip resolution and consumer compatibility. `entry_points.txt` can create executable or plugin entry points at installation. Allowing these to drift between direct and sdist wheels can produce different deployed behavior even if the entire `tf_build/` package matches. This is concretely relevant to ORAEC's prospective hash-pinned offline installation gate (#53/#60), especially the Text-Fabric runtime dependency. Smoke-importing public modules and rebuilding from sdist with online dependencies does not prove parity.
+
+By contrast, `RECORD` contains wheel-byte hashes/locations, `WHEEL` can include build-generator variation, human-readable `Summary` can differ, and ZIP compression/timestamps do not by themselves change runtime dependency resolution. Preserve the existing intentional allowance for harmless metadata differences.
+
+Decision: the parity validator should compare bounded and minimally normalized runtime-impacting header multisets, requiring a unique usable `METADATA` entry in each wheel, and compare optional bounded `entry_points.txt` bytes. Keep this separate from the stronger release-wheel project-version check. Never extract wheel ZIP entries or import candidate code. Require explicit fixtures for harmless Summary/RECORD changes to avoid accidental whole-file equality tests.
+
+This does not make wheel metadata cryptographically trustworthy, solve platform-specific filename collisions, or prove semantic equivalence of logically rewritten PEP 508 requirements. It checks deterministic runtime declaration parity between two builds of the same source.
