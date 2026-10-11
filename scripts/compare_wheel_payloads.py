@@ -22,6 +22,7 @@ _MAX_WHEEL_METADATA = 64 * 1024
 _RUNTIME_FIELDS = ("Name", "Version", "Requires-Python", "Requires-Dist", "Provides-Extra")
 _WHEEL_VERSION = re.compile(r"1\.[0-9]+\Z")
 _WHEEL_TAG = re.compile(r"[A-Za-z0-9_.]+-[A-Za-z0-9_.]+-[A-Za-z0-9_.]+\Z")
+_WheelContract = tuple[str, str, tuple[str, ...], str | None]
 
 
 class WheelPayloadMismatch(ValueError):
@@ -116,8 +117,7 @@ def _read_bounded(archive: zipfile.ZipFile, name: str, limit: int) -> bytes:
     return data
 
 
-
-def _wheel_install_contract(raw: bytes) -> tuple[str, str, tuple[str, ...], str | None]:
+def _wheel_install_contract(raw: bytes) -> _WheelContract:
     """Read WHEEL install compatibility without executing candidate distribution code."""
     metadata = BytesParser().parsebytes(raw)
     if metadata.defects:
@@ -151,7 +151,7 @@ def _wheel_install_contract(raw: bytes) -> tuple[str, str, tuple[str, ...], str 
 
 def _runtime_contract(
     wheel: Path,
-) -> tuple[tuple[tuple[str, tuple[str, ...]], ...], bytes | None, tuple[str, str, tuple[str, ...], str | None]]:
+) -> tuple[tuple[tuple[str, tuple[str, ...]], ...], bytes | None, _WheelContract]:
     """Compare install-relevant metadata while permitting generated metadata drift."""
     try:
         with zipfile.ZipFile(wheel) as archive:
