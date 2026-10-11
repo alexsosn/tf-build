@@ -12,6 +12,9 @@ def test_release_workflow_requires_explicit_manual_dispatch_and_review_boundary(
     assert "\n  pull_request:" not in source
     assert "environment: release" in source
     assert "contents: write" in source
+    assert "actions: read" in source
+    assert "actions/workflows/ci.yml/runs?head_sha=$TF_RELEASE_SOURCE" in source
+    assert '.conclusion == "success"' in source
     assert "git merge-base --is-ancestor" in source
     assert "gh release create" in source
     assert "--verify-tag" in source
