@@ -523,3 +523,76 @@ def test_sdist_manifest_rejects_replacement_after_embedded_metadata_inspection(
         meta = tar.extractfile("tf_build-0.1.0rc1/PKG-INFO")
         assert meta is not None
         assert b"99.99.99" in meta.read()
+
+
+def test_release_manifest_json_serialization_failure_leaves_no_output(
+    tmp_path: Path,
+) -> None:
+    destination = tmp_path / "wheel-manifest.json"
+    with pytest.raises(TypeError):
+        write_wheel_manifest(destination, {"invalid": object()})
+    assert not destination.exists()
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_release_manifest_fsync_failure_cleans_unpublished_staging(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    destination = tmp_path / "wheel-manifest.json"
+    attempted = False
+
+    def fail_sync(_fd: int) -> None:
+        nonlocal attempted
+        attempted = True
+        raise OSError("simulated disk sync failure")
+
+    monkeypatch.setattr(manifest_module.os, "fsync", fail_sync)
+    with pytest.raises(OSError, match="sync failure"):
+        write_wheel_manifest(destination, {"wheel": {"sha256": "a" * 64}})
+    assert attempted, "release evidence must be flushed before publication"
+    assert not destination.exists()
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_release_manifest_concurrent_destination_cannot_be_overwritten(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    destination = tmp_path / "wheel-manifest.json"
+    original_link = os.link
+    interposed = False
+    competitor = b"existing competing release evidence"
+
+    def conflict_on_publication(
+        source: str | os.PathLike[str],
+        target: str | os.PathLike[str],
+        *args: object,
+        **kwargs: object,
+    ) -> None:
+        nonlocal interposed
+        if os.fspath(target) == os.fspath(destination):
+            destination.write_bytes(competitor)
+            interposed = True
+        original_link(source, target, *args, **kwargs)
+
+    monkeypatch.setattr(manifest_module.os, "link", conflict_on_publication)
+    with pytest.raises(FileExistsError):
+        write_wheel_manifest(destination, {"source_commit": "a" * 40})
+    assert interposed
+    assert destination.read_bytes() == competitor
+    assert list(tmp_path.iterdir()) == [destination]
+
+
+def test_release_manifest_existing_symlink_is_never_replaced(
+    tmp_path: Path,
+) -> None:
+    outside = tmp_path / "do-not-touch.txt"
+    outside.write_text("original", encoding="utf-8")
+    destination = tmp_path / "wheel-manifest.json"
+    destination.symlink_to(outside)
+    with pytest.raises(FileExistsError):
+        write_wheel_manifest(destination, {"schema": 1})
+    assert destination.is_symlink()
+    assert outside.read_text(encoding="utf-8") == "original"
+    assert sorted(p.name for p in tmp_path.iterdir()) == sorted(
+        [outside.name, destination.name]
+    )
