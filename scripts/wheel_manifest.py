@@ -18,9 +18,10 @@ import stat
 import tarfile
 import tomllib
 import zipfile
+from collections.abc import Callable
 from email.parser import BytesParser
 from pathlib import Path, PurePosixPath
-from typing import Any
+from typing import Any, BinaryIO
 
 _REVISION = re.compile(r"(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})\Z")
 
@@ -29,7 +30,9 @@ class WheelManifestError(ValueError):
     """A wheel cannot be unambiguously bound to this project and source."""
 
 
-def _identity(wheel: Path) -> dict[str, str | int]:
+def _identity(
+    wheel: Path, *, inspector: Callable[[BinaryIO], None] | None = None
+) -> dict[str, str | int]:
     """Hash a stable regular file, never following raced symlinks on POSIX."""
     if wheel.is_symlink() or not wheel.is_file():
         raise WheelManifestError(f"wheel is not a regular file: {wheel.name}")
@@ -53,6 +56,11 @@ def _identity(wheel: Path) -> dict[str, str | int]:
                 initial.st_ino,
             ) != (first.st_dev, first.st_ino):
                 raise WheelManifestError(f"wheel identity changed during open: {wheel.name}")
+            # Keep inspection and digest on this one verified regular FD.
+            # zipfile/tarfile may seek within the stream; rewind before SHA256.
+            if inspector is not None:
+                inspector(stream)
+                stream.seek(0)
             digest = hashlib.sha256()
             size = 0
             while block := stream.read(1024 * 1024):
@@ -110,12 +118,13 @@ def _sdist_identity(sdist_dir: Path, name: str, version: str) -> dict[str, str |
     if path.name != f"{root}.tar.gz":
         raise WheelManifestError("sdist filename does not match project version")
     expected_meta = f"{root}/PKG-INFO"
-    found_meta = False
-    entries: set[str] = set()
-    regular_files: set[str] = set()
-    directories: set[str] = set()
-    try:
-        with tarfile.open(path, mode="r:gz") as archive:
+
+    def inspect(stream: BinaryIO) -> None:
+        found_meta = False
+        entries: set[str] = set()
+        regular_files: set[str] = set()
+        directories: set[str] = set()
+        with tarfile.open(fileobj=stream, mode="r:gz") as archive:
             for member in archive:
                 filename = member.name
                 parts = PurePosixPath(filename).parts
@@ -130,9 +139,8 @@ def _sdist_identity(sdist_dir: Path, name: str, version: str) -> dict[str, str |
                 ):
                     raise WheelManifestError("sdist contains unsafe or ambiguous archive entry")
                 entries.add(filename)
-                # A tar member can name a regular file that must also be a
-                # directory for a different member. Check implied parents in
-                # either member order; explicit and implicit dirs may coexist.
+                # Reject a regular-file ancestor in either member order.
+                # Explicit declarations of previously implied dirs are fine.
                 parents = {"/".join(parts[:depth]) for depth in range(1, len(parts))}
                 if parents & regular_files:
                     raise WheelManifestError("sdist has a regular-file ancestor")
@@ -146,21 +154,22 @@ def _sdist_identity(sdist_dir: Path, name: str, version: str) -> dict[str, str |
                 if filename == expected_meta:
                     if not member.isfile() or member.size > _MAX_METADATA_BYTES:
                         raise WheelManifestError("sdist metadata is invalid")
-                    stream = archive.extractfile(member)
-                    if stream is None:
+                    extracted = archive.extractfile(member)
+                    if extracted is None:
                         raise WheelManifestError("sdist metadata cannot be read")
-                    with stream:
-                        payload = stream.read(_MAX_METADATA_BYTES + 1)
+                    with extracted:
+                        payload = extracted.read(_MAX_METADATA_BYTES + 1)
                     if len(payload) > _MAX_METADATA_BYTES:
                         raise WheelManifestError("sdist metadata exceeds limit")
                     _check_package_identity(payload, name, version, "sdist")
                     found_meta = True
+        if not found_meta:
+            raise WheelManifestError("sdist root PKG-INFO metadata is missing")
+
+    try:
+        return _identity(path, inspector=inspect)
     except (OSError, tarfile.TarError, EOFError) as exc:
         raise WheelManifestError("sdist source distribution cannot be inspected") from exc
-    if not found_meta:
-        raise WheelManifestError("sdist root PKG-INFO metadata is missing")
-    return _identity(path)
-
 
 def build_wheel_manifest(
     wheel_dir: Path,
@@ -199,8 +208,8 @@ def build_wheel_manifest(
     if not wheel.name.startswith(expected_prefix):
         raise WheelManifestError("wheel filename does not match project name/version")
 
-    try:
-        with zipfile.ZipFile(wheel) as archive:
+    def inspect(stream: BinaryIO) -> None:
+        with zipfile.ZipFile(stream) as archive:
             meta_paths = [
                 item.filename
                 for item in archive.infolist()
@@ -211,11 +220,14 @@ def build_wheel_manifest(
             member = archive.getinfo(metadata_path)
             if member.file_size > _MAX_METADATA_BYTES:
                 raise WheelManifestError("wheel metadata exceeds size limit")
-            with archive.open(member) as stream:
-                metadata_bytes = stream.read(_MAX_METADATA_BYTES + 1)
+            with archive.open(member) as metadata_stream:
+                metadata_bytes = metadata_stream.read(_MAX_METADATA_BYTES + 1)
             if len(metadata_bytes) > _MAX_METADATA_BYTES:
                 raise WheelManifestError("wheel metadata exceeds size limit")
             _check_package_identity(metadata_bytes, name, version, "wheel")
+
+    try:
+        wheel_identity = _identity(wheel, inspector=inspect)
     except (OSError, zipfile.BadZipFile, RuntimeError, KeyError) as exc:
         raise WheelManifestError("wheel ZIP/metadata cannot be inspected") from exc
 
@@ -224,7 +236,7 @@ def build_wheel_manifest(
         "package": name,
         "version": version,
         "source_commit": revision.lower(),
-        "wheel": _identity(wheel),
+        "wheel": wheel_identity,
     }
     if sdist_dir is not None:
         record["sdist"] = _sdist_identity(sdist_dir, name, version)
