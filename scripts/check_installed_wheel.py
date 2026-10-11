@@ -14,6 +14,7 @@ PUBLIC_APIS = {
     "agora": "prepare_agora_output",
     "feature_docs": "scan_tf_feature_headers",
     "fingerprint": "fingerprint_tree",
+    "publication": "publish_path_no_clobber",
     "report": "BuildReport",
     "source": "validate_git_revision",
     "tf_strings": "require_tf_safe_string",
