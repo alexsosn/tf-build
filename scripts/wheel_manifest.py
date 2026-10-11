@@ -67,6 +67,8 @@ def _sdist_identity(sdist_dir: Path, name: str, version: str) -> dict[str, str |
     expected_meta = f"{root}/PKG-INFO"
     found_meta = False
     entries: set[str] = set()
+    regular_files: set[str] = set()
+    directories: set[str] = set()
     try:
         with tarfile.open(path, mode="r:gz") as archive:
             for member in archive:
@@ -83,6 +85,19 @@ def _sdist_identity(sdist_dir: Path, name: str, version: str) -> dict[str, str |
                 ):
                     raise WheelManifestError("sdist contains unsafe or ambiguous archive entry")
                 entries.add(filename)
+                # A tar member can name a regular file that must also be a
+                # directory for a different member. Check implied parents in
+                # either member order; explicit and implicit dirs may coexist.
+                parents = {"/".join(parts[:depth]) for depth in range(1, len(parts))}
+                if parents & regular_files:
+                    raise WheelManifestError("sdist has a regular-file ancestor")
+                if member.isfile() and filename in directories:
+                    raise WheelManifestError("sdist file collides with a directory")
+                directories.update(parents)
+                if member.isdir():
+                    directories.add(filename)
+                else:
+                    regular_files.add(filename)
                 if filename == expected_meta:
                     if not member.isfile() or member.size > _MAX_METADATA_BYTES:
                         raise WheelManifestError("sdist metadata is invalid")

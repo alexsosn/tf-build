@@ -310,3 +310,84 @@ def test_sdist_manifest_rejects_ambiguous_required_metadata(
             wheels, project, "a" * 40, sdist_dir=sdist.parent,
             release_tag="v0.1.0rc1",
         )
+
+
+def _tar_members(path: Path, entries: list[tuple[str, bytes | None]]) -> None:
+    """Create a real source archive: None marks an explicit directory."""
+    with tarfile.open(path, "w:gz") as tar:
+        for name, payload in entries:
+            member = tarfile.TarInfo(name)
+            if payload is None:
+                member.type = tarfile.DIRTYPE
+                tar.addfile(member)
+            else:
+                member.size = len(payload)
+                tar.addfile(member, io.BytesIO(payload))
+
+
+@pytest.mark.parametrize("file_first", [False, True])
+@pytest.mark.parametrize("file_as_ancestor", ["pkg", "root"])
+def test_sdist_manifest_rejects_regular_file_ancestor_in_either_order(
+    tmp_path: Path, file_first: bool, file_as_ancestor: str
+) -> None:
+    project, wheels, sdist = _sdist_fixture(tmp_path)
+    root = "tf_build-0.1.0rc1"
+    pkg_info = (f"{root}/PKG-INFO", _VALID_SDIST_META)
+    members: list[tuple[str, bytes | None]]
+    if file_as_ancestor == "pkg":
+        ancestor = (f"{root}/pkg", b"regular file blocks this directory")
+        descendant = (f"{root}/pkg/mod.py", b"MODULE = 1\n")
+        members = [pkg_info, ancestor, descendant] if file_first else [
+            pkg_info, descendant, ancestor,
+        ]
+    else:
+        ancestor = (root, b"regular file blocks source root")
+        members = [ancestor, pkg_info] if file_first else [pkg_info, ancestor]
+    _tar_members(sdist, members)
+
+    with pytest.raises(WheelManifestError, match="sdist|archive|ancestor|directory"):
+        build_wheel_manifest(
+            wheels, project, "a" * 40,
+            sdist_dir=sdist.parent, release_tag="v0.1.0rc1",
+        )
+
+
+def test_sdist_manifest_accepts_explicit_and_implicit_parent_directories(
+    tmp_path: Path,
+) -> None:
+    project, wheels, sdist = _sdist_fixture(tmp_path)
+    root = "tf_build-0.1.0rc1"
+    _tar_members(
+        sdist,
+        [
+            (f"{root}/PKG-INFO", _VALID_SDIST_META),
+            (f"{root}/pkg/mod.py", b"MODULE = 1\n"),
+            (f"{root}/", None),
+            (f"{root}/pkg/", None),
+        ],
+    )
+    record = build_wheel_manifest(
+        wheels, project, "a" * 40,
+        sdist_dir=sdist.parent, release_tag="v0.1.0rc1",
+    )
+    assert record["sdist"]["sha256"] == hashlib.sha256(sdist.read_bytes()).hexdigest()
+
+
+def test_sdist_manifest_preserves_explicit_file_directory_alias_rejection(
+    tmp_path: Path,
+) -> None:
+    project, wheels, sdist = _sdist_fixture(tmp_path)
+    root = "tf_build-0.1.0rc1"
+    _tar_members(
+        sdist,
+        [
+            (f"{root}/PKG-INFO", _VALID_SDIST_META),
+            (f"{root}/pkg", b"file"),
+            (f"{root}/pkg/", None),
+        ],
+    )
+    with pytest.raises(WheelManifestError, match="sdist|ambiguous"):
+        build_wheel_manifest(
+            wheels, project, "a" * 40,
+            sdist_dir=sdist.parent, release_tag="v0.1.0rc1",
+        )
