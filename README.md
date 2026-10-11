@@ -379,9 +379,12 @@ The proposed first candidate is `tf-build==0.1.0rc1` (tag `v0.1.0rc1`).
 A merged candidate PR or 30-day GitHub Actions artifact **is not** a published
 GitHub Release. CI builds real wheel and sdist archives, checks the embedded
 package version, and records full source SHA plus exact asset SHA256 in
-`wheel-manifest.json`. It also tests installation of the wheel and a
-prepared offline dependency wheelhouse. That Linux CI wheelhouse is not a
-cross-platform dependency lock.
+`wheel-manifest.json`. It also rebuilds a *separate wheel from the emitted
+sdist* and smoke-installs its public APIs in a fresh environment, alongside
+testing the direct release wheel and a prepared offline dependency wheelhouse.
+Rebuilding from the sdist may fetch PEP 517 build dependencies online; it is
+not itself an offline-source-build guarantee. The Linux CI wheelhouse is not
+a cross-platform dependency lock.
 
 **Owner-controlled publication procedure** (only after final release approval):
 
