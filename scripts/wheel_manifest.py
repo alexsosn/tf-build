@@ -19,7 +19,7 @@ from email.parser import BytesParser
 from pathlib import Path
 from typing import Any
 
-_REVISION = re.compile(r"(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})\\Z")
+_REVISION = re.compile(r"(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})\Z")
 
 
 class WheelManifestError(ValueError):
