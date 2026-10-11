@@ -333,6 +333,7 @@ def test_sdist_manifest_rejects_regular_file_ancestor_in_either_order(
     project, wheels, sdist = _sdist_fixture(tmp_path)
     root = "tf_build-0.1.0rc1"
     pkg_info = (f"{root}/PKG-INFO", _VALID_SDIST_META)
+    members: list[tuple[str, bytes | None]]
     if file_as_ancestor == "pkg":
         ancestor = (f"{root}/pkg", b"regular file blocks this directory")
         descendant = (f"{root}/pkg/mod.py", b"MODULE = 1\n")
