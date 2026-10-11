@@ -84,7 +84,10 @@ def _run_git(source: Path, *args: str, timeout_seconds: float) -> str:
     except OSError:
         # A process-spawn exception can itself include untrusted path details.
         raise GitSourceError(f"Git command {operation!r} could not start") from None
-    return result.stdout.strip()
+    # Git delimits line-oriented stdout with one final LF. Do not use strip():
+    # a valid POSIX working-tree root can end in significant spaces or tabs.
+    # NUL-terminated git ls-files -z output must remain byte-for-byte intact.
+    return result.stdout.removesuffix("\\n")
 
 
 def _canonical_source(source: str | Path) -> Path:
