@@ -101,7 +101,6 @@ def _package_payload(wheel: Path) -> dict[str, str]:
     return files
 
 
-
 def _read_bounded(archive: zipfile.ZipFile, name: str, limit: int) -> bytes:
     """Read a small wheel metadata file without extraction or unbounded allocation."""
     member = archive.getinfo(name)
