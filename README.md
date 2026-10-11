@@ -165,6 +165,31 @@ with BuildWorkspace("/path/to/final-artifact") as workspace:
 
 The final destination must not already exist. Exiting the context without `publish()`, or leaving it through an exception, removes unpublished staging. Publication is atomic no-clobber on supported platforms; replacement of an existing artifact is intentionally a separate contract.
 
+### Low-level atomic publication for externally managed staging
+
+`tf_build.publication.publish_path_no_clobber` exposes the same
+platform-specific, atomic no-replace operation used internally by
+`BuildWorkspace.publish()`. It is intended for adapters such as ORAEC-TF's
+Agora output handler, where the host may keep an **existing empty** output
+directory in place until the end of materialization:
+
+```python
+from pathlib import Path
+from tf_build.publication import publish_path_no_clobber
+
+# The caller has already built and verified staging_path. If the host-owned
+# output directory was initially empty, the caller removes it only when ready.
+publish_path_no_clobber(Path("/tmp/verified-staging"), Path("/tmp/host-output"))
+```
+
+A new competing destination, **even an empty directory or a symlink**, causes
+`FileExistsError` without replacing it. The caller is responsible for
+staging, validation, optional empty-root removal, handling errors and cleanup.
+This function does **not** attest artifact contents, replace existing outputs,
+create a transaction, copy across filesystems or silently fall back to a
+non-atomic rename. It requires the source and destination to be on a filesystem
+supporting the platform's atomic no-clobber rename operation.
+
 ## Raw-byte artifact fingerprints
 
 `tf_build.fingerprint` computes a versioned SHA-256 identity of every
