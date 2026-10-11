@@ -118,11 +118,11 @@ def test_public_publisher_moves_file_without_changing_bytes(tmp_path: Path) -> N
 def test_public_publisher_fails_closed_when_atomic_rename_unavailable(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from tf_build import _atomic
-
     source = _stage(tmp_path)
     destination = tmp_path / "published"
-    monkeypatch.setattr(_atomic.ctypes, "CDLL", lambda *args, **kwargs: object())
+    monkeypatch.setattr(
+        "tf_build._atomic.ctypes.CDLL", lambda *args, **kwargs: object()
+    )
 
     with pytest.raises(OSError, match="unsupported"):
         publish_path_no_clobber(source, destination)
