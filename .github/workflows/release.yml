@@ -106,8 +106,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          passed="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$TF_RELEASE_SOURCE&event=push&per_page=100" \
-            --jq '[.workflow_runs[] | select(.head_sha == "'$TF_RELEASE_SOURCE'") | select(.conclusion == "success")] | length')"
+          passed="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$TF_RELEASE_SOURCE&event=push&branch=main&per_page=100" \
+            --jq '[.workflow_runs[] | select(.head_sha == "'$TF_RELEASE_SOURCE'") | select(.event == "push") | select(.head_branch == "main") | select(.conclusion == "success")] | length')"
           if [[ ! "$passed" =~ ^[0-9]+$ || "$passed" -lt 1 ]]; then
             echo "Exact release commit has no successful main push CI (matrix + distribution)" >&2
             exit 1
