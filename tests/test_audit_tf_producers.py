@@ -186,3 +186,13 @@ def test_full_first_page_paginates_to_second_page() -> None:
         "tracked": 1,
         "excluded": 99,
     }
+
+
+def test_pull_request_job_name_does_not_count_as_trigger() -> None:
+    false_event = (
+        "on:\n  push:\n    branches: [main]\n"
+        "jobs:\n  pull_request:\n    runs-on: ubuntu-latest\n"
+        "    steps:\n      - run: pytest -q\n"
+    )
+    with pytest.raises(AuditError, match="pull_request"):
+        audit_inventory(manifest(), api(ci=false_event))
