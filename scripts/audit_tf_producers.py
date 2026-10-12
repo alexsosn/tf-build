@@ -12,8 +12,9 @@ import json
 import os
 import re
 import sys
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
@@ -113,7 +114,12 @@ def audit_inventory(manifest: dict[str, Any], fetch: FetchJson) -> dict[str, int
         stale = sorted(classified - observed)
         raise AuditError(f"public non-fork inventory drift: unclassified={missing}; stale={stale}")
 
-    counts = {"public_nonfork": len(observed), "supported": 0, "tracked": 0, "excluded": len(excluded)}
+    counts = {
+        "public_nonfork": len(observed),
+        "supported": 0,
+        "tracked": 0,
+        "excluded": len(excluded),
+    }
     for repo, entry in sorted(producers.items()):
         if not isinstance(entry, dict):
             raise AuditError(f"{repo}: malformed policy")
@@ -129,8 +135,15 @@ def audit_inventory(manifest: dict[str, Any], fetch: FetchJson) -> dict[str, int
         if status == "supported":
             source_path = entry.get("source_path")
             marker = entry.get("ci_marker")
-            if not isinstance(source_path, str) or not source_path or not isinstance(marker, str) or not marker:
-                raise AuditError(f"{repo}: supported producer lacks source or executable CI evidence")
+            if (
+                not isinstance(source_path, str)
+                or not source_path
+                or not isinstance(marker, str)
+                or not marker
+            ):
+                raise AuditError(
+                    f"{repo}: supported producer lacks source or executable CI evidence"
+                )
             _read_repository_file(owner, repo, source_path, fetch)
             if marker not in workflow:
                 raise AuditError(f"{repo}: CI workflow lacks required marker {marker!r}")
@@ -140,8 +153,14 @@ def audit_inventory(manifest: dict[str, Any], fetch: FetchJson) -> dict[str, int
                 raise AuditError(f"{repo}: incomplete producer needs a positive issue number")
             issue_path = f"/repos/{quote(owner)}/{quote(repo)}/issues/{issue}"
             record = fetch(issue_path)
-            if not isinstance(record, dict) or record.get("state") != "open" or "pull_request" in record:
-                raise AuditError(f"{repo}: tracking issue #{issue} must remain open until TF support is verified")
+            if (
+                not isinstance(record, dict)
+                or record.get("state") != "open"
+                or "pull_request" in record
+            ):
+                raise AuditError(
+                    f"{repo}: tracking issue #{issue} must remain open until TF support is verified"
+                )
         counts[status] += 1
     return counts
 
