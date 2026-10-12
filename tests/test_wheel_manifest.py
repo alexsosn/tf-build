@@ -546,7 +546,7 @@ def test_release_manifest_fsync_failure_cleans_unpublished_staging(
         attempted = True
         raise OSError("simulated disk sync failure")
 
-    monkeypatch.setattr(manifest_module.os, "fsync", fail_sync)
+    monkeypatch.setattr(os, "fsync", fail_sync)
     with pytest.raises(OSError, match="sync failure"):
         write_wheel_manifest(destination, {"wheel": {"sha256": "a" * 64}})
     assert attempted, "release evidence must be flushed before publication"
@@ -565,16 +565,14 @@ def test_release_manifest_concurrent_destination_cannot_be_overwritten(
     def conflict_on_publication(
         source: str | os.PathLike[str],
         target: str | os.PathLike[str],
-        *args: object,
-        **kwargs: object,
     ) -> None:
         nonlocal interposed
         if os.fspath(target) == os.fspath(destination):
             destination.write_bytes(competitor)
             interposed = True
-        original_link(source, target, *args, **kwargs)
+        original_link(source, target)
 
-    monkeypatch.setattr(manifest_module.os, "link", conflict_on_publication)
+    monkeypatch.setattr(os, "link", conflict_on_publication)
     with pytest.raises(FileExistsError):
         write_wheel_manifest(destination, {"source_commit": "a" * 40})
     assert interposed
