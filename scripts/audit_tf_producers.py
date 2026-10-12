@@ -100,9 +100,9 @@ def _has_pull_request_trigger(workflow: str) -> bool:
         uncommented = line.split(" #", 1)[0]
         if not line[0].isspace():
             in_events = uncommented.strip() == "on:"
-            if re.fullmatch(r"on:\\s*\\[(?:[^]]*,\\s*)?pull_request(?:\\s*,[^]]*)?\\]", uncommented):
+            if re.fullmatch(r"on:\s*\[[^]]*\bpull_request\b[^]]*\]", uncommented):
                 return True
-        elif in_events and re.match(r"^  pull_request\\s*:", uncommented):
+        elif in_events and re.match(r"^  pull_request\s*:", uncommented):
             return True
     return False
 
