@@ -1,6 +1,7 @@
 """Offline contract tests for the read-only public TF producer audit."""
+
 import base64
-import copy
+
 import pytest
 
 from scripts.audit_tf_producers import AuditError, audit_inventory
@@ -26,7 +27,13 @@ def manifest():
     }
 
 
-def api(*, unknown=False, issue_state="open", ci="on:\n  pull_request:\njobs:\n  test:\n    run: pytest -q\n", source=True):
+def api(
+    *,
+    unknown=False,
+    issue_state="open",
+    ci="on:\n  pull_request:\njobs:\n  test:\n    run: pytest -q\n",
+    source=True,
+):
     names = ["Corpus-TF", "PG-TF", "utility"]
     if unknown:
         names.append("Unclassified-TF")
@@ -34,11 +41,31 @@ def api(*, unknown=False, issue_state="open", ci="on:\n  pull_request:\njobs:\n 
     def fetch(url):
         if "/users/alexsosn/repos?" in url:
             if "page=1" in url:
-                rows = [{"name": n, "fork": False, "private": False, "owner": {"login": "alexsosn"}} for n in names]
-                rows.extend([
-                    {"name": "forked", "fork": True, "private": False, "owner": {"login": "alexsosn"}},
-                    {"name": "private", "fork": False, "private": True, "owner": {"login": "alexsosn"}},
-                ])
+                rows = [
+                    {
+                        "name": n,
+                        "fork": False,
+                        "private": False,
+                        "owner": {"login": "alexsosn"},
+                    }
+                    for n in names
+                ]
+                rows.extend(
+                    [
+                        {
+                            "name": "forked",
+                            "fork": True,
+                            "private": False,
+                            "owner": {"login": "alexsosn"},
+                        },
+                        {
+                            "name": "private",
+                            "fork": False,
+                            "private": True,
+                            "owner": {"login": "alexsosn"},
+                        },
+                    ]
+                )
                 return rows
             return []
         if url.endswith("/issues/3"):
@@ -46,9 +73,11 @@ def api(*, unknown=False, issue_state="open", ci="on:\n  pull_request:\njobs:\n 
         if "/contents/src/writer.py" in url:
             if not source:
                 raise AuditError("HTTP 404")
-            return {"type": "file", "content": base64.b64encode(b"from tf.fabric import Fabric\n").decode(), "encoding": "base64"}
+            content = base64.b64encode(b"from tf.fabric import Fabric\n").decode()
+            return {"type": "file", "content": content, "encoding": "base64"}
         if "/contents/.github/workflows/ci.yml" in url:
-            return {"type": "file", "content": base64.b64encode(ci.encode()).decode(), "encoding": "base64"}
+            content = base64.b64encode(ci.encode()).decode()
+            return {"type": "file", "content": content, "encoding": "base64"}
         raise AuditError(f"unexpected API URL: {url}")
 
     return fetch
@@ -71,7 +100,10 @@ def test_closed_tracking_issue_fails():
 
 def test_missing_pr_ci_trigger_fails():
     with pytest.raises(AuditError, match="pull_request"):
-        audit_inventory(manifest(), api(ci="on:\n  push:\n    branches: [main]\n  # pull_request:\n"))
+        audit_inventory(
+            manifest(),
+            api(ci="on:\n  push:\n    branches: [main]\n  # pull_request:\n"),
+        )
 
 
 def test_missing_source_evidence_fails():
@@ -81,7 +113,10 @@ def test_missing_source_evidence_fails():
 
 def test_missing_executable_ci_marker_fails():
     with pytest.raises(AuditError, match="pytest -q"):
-        audit_inventory(manifest(), api(ci="on:\n  pull_request:\njobs:\n  test:\n    run: echo ok\n"))
+        audit_inventory(
+            manifest(),
+            api(ci="on:\n  pull_request:\njobs:\n  test:\n    run: echo ok\n"),
+        )
 
 
 def test_duplicate_classification_is_rejected():
@@ -94,6 +129,7 @@ def test_duplicate_classification_is_rejected():
 def test_public_inventory_fetch_failure_is_not_a_pass():
     def fail(_url):
         raise AuditError("rate limited")
+
     with pytest.raises(AuditError, match="rate limited"):
         audit_inventory(manifest(), fail)
 
