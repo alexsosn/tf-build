@@ -597,7 +597,7 @@ def test_release_manifest_existing_symlink_is_never_replaced(
 
 
 @pytest.mark.skipif(os.name != "posix", reason="POSIX ctime semantics required")
-def test_manifest_identity_rejects_same_inode_rewrite_after_hash_before_final_lstat(
+def test_manifest_identity_rejects_rewrite_after_final_fd_snapshot(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     candidate = tmp_path / "candidate.whl"
@@ -609,28 +609,27 @@ def test_manifest_identity_rejects_same_inode_rewrite_after_hash_before_final_ls
     before = candidate.stat()
     original_sha256 = hashlib.sha256(original).hexdigest()
 
-    native_lstat = Path.lstat
+    native_fstat = os.fstat
     observations = 0
 
-    def overwrite_at_final_path_check(path: Path) -> os.stat_result:
+    def overwrite_after_final_fd_snapshot(fd: int) -> os.stat_result:
         nonlocal observations
-        if path == candidate:
+        snapshot = native_fstat(fd)
+        if (snapshot.st_dev, snapshot.st_ino) == (before.st_dev, before.st_ino):
             observations += 1
-            if observations == 3:
-                # First lstat is from Path.is_symlink(), second from initial
-                # identity inspection; the third is AFTER the hashed FD closes.
-                # Mutate the very same
-                # inode without changing size or the visible modification time.
+            if observations == 2:
+                # Mutate only AFTER the hash's final fstat has captured its
+                # stable inode metadata, before the final pathname lstat.
                 candidate.write_bytes(replacement)
                 os.utime(candidate, ns=(old_ns, old_ns))
-        return native_lstat(path)
+        return snapshot
 
-    monkeypatch.setattr(Path, "lstat", overwrite_at_final_path_check)
+    monkeypatch.setattr(os, "fstat", overwrite_after_final_fd_snapshot)
     with pytest.raises(WheelManifestError, match="changed|identity"):
         manifest_module._identity(candidate)
 
     after = candidate.stat()
-    assert observations == 3
+    assert observations == 2
     assert (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns) == (
         after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns
     )
