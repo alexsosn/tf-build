@@ -146,7 +146,7 @@ def audit_inventory(manifest: dict[str, Any], fetch: FetchJson) -> dict[str, int
         if not isinstance(workflow_path, str) or not workflow_path.startswith(".github/workflows/"):
             raise AuditError(f"{repo}: missing CI workflow proof")
         workflow = _read_repository_file(owner, repo, workflow_path, fetch)
-        if not re.search(r"(?m)^\s{0,4}pull_request\s*:", workflow):
+        if not _has_pull_request_trigger(workflow):
             raise AuditError(f"{repo}: {workflow_path} has no pull_request CI trigger")
         if status == "supported":
             source_path = entry.get("source_path")
