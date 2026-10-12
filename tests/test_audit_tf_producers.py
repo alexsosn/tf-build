@@ -1,13 +1,17 @@
 """Offline contract tests for the read-only public TF producer audit."""
 
+from __future__ import annotations
+
 import base64
+from collections.abc import Callable
+from typing import Any
 
 import pytest
 
 from scripts.audit_tf_producers import AuditError, audit_inventory
 
 
-def manifest():
+def manifest() -> dict[str, Any]:
     return {
         "owner": "alexsosn",
         "excluded": ["utility"],
@@ -29,16 +33,16 @@ def manifest():
 
 def api(
     *,
-    unknown=False,
-    issue_state="open",
-    ci="on:\n  pull_request:\njobs:\n  test:\n    run: pytest -q\n",
-    source=True,
-):
+    unknown: bool = False,
+    issue_state: str = "open",
+    ci: str = "on:\n  pull_request:\njobs:\n  test:\n    run: pytest -q\n",
+    source: bool = True,
+) -> Callable[[str], Any]:
     names = ["Corpus-TF", "PG-TF", "utility"]
     if unknown:
         names.append("Unclassified-TF")
 
-    def fetch(url):
+    def fetch(url: str) -> Any:
         if "/users/alexsosn/repos?" in url:
             if "page=1" in url:
                 rows = [
@@ -83,22 +87,22 @@ def api(
     return fetch
 
 
-def test_supported_and_tracked_statuses_are_accepted():
+def test_supported_and_tracked_statuses_are_accepted() -> None:
     result = audit_inventory(manifest(), api())
     assert result == {"public_nonfork": 3, "supported": 1, "tracked": 1, "excluded": 1}
 
 
-def test_unclassified_new_public_repository_fails_closed():
+def test_unclassified_new_public_repository_fails_closed() -> None:
     with pytest.raises(AuditError, match="Unclassified-TF"):
         audit_inventory(manifest(), api(unknown=True))
 
 
-def test_closed_tracking_issue_fails():
+def test_closed_tracking_issue_fails() -> None:
     with pytest.raises(AuditError, match="issue.*3.*open"):
         audit_inventory(manifest(), api(issue_state="closed"))
 
 
-def test_missing_pr_ci_trigger_fails():
+def test_missing_pr_ci_trigger_fails() -> None:
     with pytest.raises(AuditError, match="pull_request"):
         audit_inventory(
             manifest(),
@@ -106,12 +110,12 @@ def test_missing_pr_ci_trigger_fails():
         )
 
 
-def test_missing_source_evidence_fails():
+def test_missing_source_evidence_fails() -> None:
     with pytest.raises(AuditError, match="src/writer.py"):
         audit_inventory(manifest(), api(source=False))
 
 
-def test_missing_executable_ci_marker_fails():
+def test_missing_executable_ci_marker_fails() -> None:
     with pytest.raises(AuditError, match="pytest -q"):
         audit_inventory(
             manifest(),
@@ -119,22 +123,22 @@ def test_missing_executable_ci_marker_fails():
         )
 
 
-def test_duplicate_classification_is_rejected():
+def test_duplicate_classification_is_rejected() -> None:
     m = manifest()
     m["excluded"].append("Corpus-TF")
     with pytest.raises(AuditError, match="both"):
         audit_inventory(m, api())
 
 
-def test_public_inventory_fetch_failure_is_not_a_pass():
-    def fail(_url):
+def test_public_inventory_fetch_failure_is_not_a_pass() -> None:
+    def fail(_url: str) -> Any:
         raise AuditError("rate limited")
 
     with pytest.raises(AuditError, match="rate limited"):
         audit_inventory(manifest(), fail)
 
 
-def test_wrong_owner_is_rejected():
+def test_wrong_owner_is_rejected() -> None:
     m = manifest()
     m["owner"] = "another-account"
     with pytest.raises(AuditError, match="owner"):
