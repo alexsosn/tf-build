@@ -594,3 +594,45 @@ def test_release_manifest_existing_symlink_is_never_replaced(
     assert sorted(p.name for p in tmp_path.iterdir()) == sorted(
         [outside.name, destination.name]
     )
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX ctime semantics required")
+def test_manifest_identity_rejects_rewrite_after_final_fd_snapshot(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    candidate = tmp_path / "candidate.whl"
+    original = b"A" * 4096
+    replacement = b"B" * len(original)
+    candidate.write_bytes(original)
+    old_ns = 1_700_000_000_123_456_789
+    os.utime(candidate, ns=(old_ns, old_ns))
+    before = candidate.stat()
+    original_sha256 = hashlib.sha256(original).hexdigest()
+
+    native_fstat = os.fstat
+    observations = 0
+
+    def overwrite_after_final_fd_snapshot(fd: int) -> os.stat_result:
+        nonlocal observations
+        snapshot = native_fstat(fd)
+        if (snapshot.st_dev, snapshot.st_ino) == (before.st_dev, before.st_ino):
+            observations += 1
+            if observations == 2:
+                # Mutate only AFTER the hash's final fstat has captured its
+                # stable inode metadata, before the final pathname lstat.
+                candidate.write_bytes(replacement)
+                os.utime(candidate, ns=(old_ns, old_ns))
+        return snapshot
+
+    monkeypatch.setattr(os, "fstat", overwrite_after_final_fd_snapshot)
+    with pytest.raises(WheelManifestError, match="changed|identity"):
+        manifest_module._identity(candidate)
+
+    after = candidate.stat()
+    assert observations == 2
+    assert (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns) == (
+        after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns
+    )
+    assert after.st_ctime_ns != before.st_ctime_ns
+    assert candidate.read_bytes() == replacement
+    assert hashlib.sha256(candidate.read_bytes()).hexdigest() != original_sha256
