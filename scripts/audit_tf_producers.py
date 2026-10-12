@@ -91,6 +91,22 @@ def _read_repository_file(owner: str, repo: str, path: str, fetch: FetchJson) ->
         raise AuditError(f"{repo}: invalid UTF-8 evidence {path}") from exc
 
 
+def _has_pull_request_trigger(workflow: str) -> bool:
+    """Only accept a top-level GitHub Actions 'on' pull_request trigger."""
+    in_events = False
+    for line in workflow.splitlines():
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        uncommented = line.split(" #", 1)[0]
+        if not line[0].isspace():
+            in_events = uncommented.strip() == "on:"
+            if re.fullmatch(r"on:\\s*\\[(?:[^]]*,\\s*)?pull_request(?:\\s*,[^]]*)?\\]", uncommented):
+                return True
+        elif in_events and re.match(r"^  pull_request\\s*:", uncommented):
+            return True
+    return False
+
+
 def audit_inventory(manifest: dict[str, Any], fetch: FetchJson) -> dict[str, int]:
     owner = manifest.get("owner")
     if owner != "alexsosn":
