@@ -182,7 +182,9 @@ def audit_inventory(manifest: dict[str, Any], fetch: FetchJson) -> dict[str, int
                     raise AuditError(f"{repo}: missing Context-Fabric PR acceptance policy")
                 cf_workflow = _read_repository_file(owner, repo, cf_path, fetch)
                 if not _has_pull_request_trigger(cf_workflow):
-                    raise AuditError(f"{repo}: Context-Fabric acceptance lacks pull_request trigger")
+                    raise AuditError(
+                        f"{repo}: Context-Fabric acceptance lacks pull_request trigger"
+                    )
                 executable = (
                     line.split(" #", 1)[0]
                     for line in cf_workflow.splitlines()
