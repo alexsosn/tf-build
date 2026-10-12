@@ -65,7 +65,7 @@ def test_release_ci_jq_filter_on_realistic_action_runs(
         encoding="utf-8"
     )
     # Reassemble the actual shell-quoted --jq expression (including source SHA substitution).
-    match = re.search(r"--jq '([^']*)'\\$TF_RELEASE_SOURCE'([^']*)'", workflow)
+    match = re.search(r"--jq '([^']*)'\$TF_RELEASE_SOURCE'([^']*)'", workflow)
     assert match is not None, "cannot find the release workflow's actual gh --jq expression"
     source_sha = "a" * 40
     expression = match.group(1) + source_sha + match.group(2)
