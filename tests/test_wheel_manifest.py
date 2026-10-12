@@ -616,8 +616,10 @@ def test_manifest_identity_rejects_same_inode_rewrite_after_hash_before_final_ls
         nonlocal observations
         if path == candidate:
             observations += 1
-            if observations == 2:
-                # The opened SHA256 FD was already closed. Mutate the very same
+            if observations == 3:
+                # First lstat is from Path.is_symlink(), second from initial
+                # identity inspection; the third is AFTER the hashed FD closes.
+                # Mutate the very same
                 # inode without changing size or the visible modification time.
                 candidate.write_bytes(replacement)
                 os.utime(candidate, ns=(old_ns, old_ns))
@@ -628,7 +630,7 @@ def test_manifest_identity_rejects_same_inode_rewrite_after_hash_before_final_ls
         manifest_module._identity(candidate)
 
     after = candidate.stat()
-    assert observations == 2
+    assert observations == 3
     assert (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns) == (
         after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns
     )
