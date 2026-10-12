@@ -143,3 +143,46 @@ def test_wrong_owner_is_rejected() -> None:
     m["owner"] = "another-account"
     with pytest.raises(AuditError, match="owner"):
         audit_inventory(m, api())
+
+
+def test_commented_ci_command_is_not_accepted_as_executable() -> None:
+    only_commented = (
+        "on:\n  pull_request:\njobs:\n  test:\n"
+        "    steps:\n      - run: echo hello\n      # pytest -q\n"
+    )
+    with pytest.raises(AuditError, match="pytest -q"):
+        audit_inventory(manifest(), api(ci=only_commented))
+
+
+def test_full_first_page_paginates_to_second_page() -> None:
+    policy = manifest()
+    extra = [f"other-{i:03d}" for i in range(98)]
+    policy["excluded"].extend(extra)
+
+    def entry(name: str) -> dict[str, Any]:
+        return {
+            "name": name,
+            "owner": {"login": "alexsosn"},
+            "fork": False,
+            "private": False,
+        }
+
+    rows = [entry("Corpus-TF"), entry("PG-TF"), *(entry(n) for n in extra)]
+    assert len(rows) == 100
+    delegate = api()
+
+    def fetch(url: str) -> Any:
+        if "/users/alexsosn/repos?" in url:
+            if url.endswith("&page=1"):
+                return rows
+            if url.endswith("&page=2"):
+                return [entry("utility")]
+            raise AssertionError(f"unexpected page: {url}")
+        return delegate(url)
+
+    assert audit_inventory(policy, fetch) == {
+        "public_nonfork": 101,
+        "supported": 1,
+        "tracked": 1,
+        "excluded": 99,
+    }
