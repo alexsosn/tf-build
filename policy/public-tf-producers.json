@@ -1,0 +1,104 @@
+{
+  "owner": "alexsosn",
+  "excluded": [
+    "Agora",
+    "AssociationBot",
+    "Bartimaeus",
+    "CAL-MCP",
+    "CV",
+    "ColourLovers",
+    "ConfNotes",
+    "ConvNetSwift",
+    "HKPopulator",
+    "MarslandMLAlgo",
+    "MotionRecognition",
+    "OwlExtensions",
+    "OwlLocalizer",
+    "RosalindMendelsFirstLaw",
+    "SwiftMLBook",
+    "UgaritOCR",
+    "Voynich",
+    "Word2Vec-iOS",
+    "aDNA",
+    "abc-collection",
+    "alexsosn.github.io",
+    "cuc-morph",
+    "datasci",
+    "iOS_ML",
+    "mcp-demo",
+    "midrash-atlas",
+    "ontoTF",
+    "owl-heart",
+    "semitic-keyman",
+    "tf-build",
+    "tf-jev",
+    "ugarit-dh-workshop",
+    "ugaritic-nb"
+  ],
+  "producers": {
+    "BHSA-cantillation-trees": {
+      "status": "supported",
+      "source_path": "src/bhsa_cantillation/cli.py",
+      "ci_workflow": ".github/workflows/regenerate-pinned.yml",
+      "ci_marker": "bhsa-cantillation build"
+    },
+    "CATSS-TF": {
+      "status": "supported",
+      "source_path": "src/catss_tf/canonical_materializer.py",
+      "ci_workflow": ".github/workflows/ci.yml",
+      "ci_marker": "pytest -q"
+    },
+    "CTC-TF": {
+      "status": "supported",
+      "source_path": "scripts/check_reviewed_cuc_burns_feature_module.py",
+      "ci_workflow": ".github/workflows/test-reviewed-cuc-burns-feature-module.yml",
+      "ci_marker": "python scripts/check_reviewed_cuc_burns_feature_module.py"
+    },
+    "CopticScriptorium-TF": {
+      "status": "supported",
+      "source_path": "copticscriptorium_tf/writer.py",
+      "ci_workflow": ".github/workflows/issue15-writer.yml",
+      "ci_marker": "python research/issue-15/writer_slice.py"
+    },
+    "IIP-TF": {
+      "status": "supported",
+      "source_path": "src/iip_tf/tf_writer.py",
+      "ci_workflow": ".github/workflows/validate-pinned-tf.yml",
+      "ci_marker": "python scripts/validate_pinned_tf.py"
+    },
+    "ORAEC-TF": {
+      "status": "supported",
+      "source_path": "src/oraec_tf/writer.py",
+      "ci_workflow": ".github/workflows/writer-validation.yml",
+      "ci_marker": "oraec-tf convert"
+    },
+    "ORACC-TF": {
+      "status": "supported",
+      "source_path": "programs/oracc_tf/corpus.py",
+      "ci_workflow": ".github/workflows/tests.yml",
+      "ci_marker": "pytest -q -m corpus"
+    },
+    "PG-TF": {
+      "status": "tracked",
+      "issue": 3,
+      "ci_workflow": ".github/workflows/ci.yml"
+    },
+    "OpenGreek-TF": {
+      "status": "tracked",
+      "issue": 6,
+      "ci_workflow": ".github/workflows/mini-writer-pinned.yml"
+    },
+    "Pseudepigrapha-TF": {
+      "status": "supported",
+      "source_path": "src/pseudepigrapha_tf/writer.py",
+      "ci_workflow": ".github/workflows/test.yml",
+      "ci_marker": "pseudepigrapha-tf convert"
+    },
+    "TLHdig-TF": {
+      "status": "supported",
+      "source_path": "programs/tests/test_shard.py",
+      "ci_workflow": ".github/workflows/ci.yml",
+      "ci_marker": "python -m pytest programs/tests -q"
+    }
+  }
+}
