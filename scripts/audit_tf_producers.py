@@ -145,7 +145,12 @@ def audit_inventory(manifest: dict[str, Any], fetch: FetchJson) -> dict[str, int
                     f"{repo}: supported producer lacks source or executable CI evidence"
                 )
             _read_repository_file(owner, repo, source_path, fetch)
-            if marker not in workflow:
+            executable_lines = (
+                line.split(" #", 1)[0]
+                for line in workflow.splitlines()
+                if not line.lstrip().startswith("#")
+            )
+            if not any(marker in line for line in executable_lines):
                 raise AuditError(f"{repo}: CI workflow lacks required marker {marker!r}")
         else:
             issue = entry.get("issue")
