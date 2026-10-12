@@ -20,6 +20,8 @@ from urllib.parse import quote
 from urllib.request import Request, urlopen
 
 API_ROOT = "https://api.github.com"
+# First explicit Context-Fabric compiled-graph acceptance pilot for TF producers.
+CF_ACCEPTANCE_REQUIRED = frozenset({"CATSS-TF", "IIP-TF", "ORAEC-TF"})
 FetchJson = Callable[[str], Any]
 
 
@@ -168,6 +170,41 @@ def audit_inventory(manifest: dict[str, Any], fetch: FetchJson) -> dict[str, int
             )
             if not any(marker in line for line in executable_lines):
                 raise AuditError(f"{repo}: CI workflow lacks required marker {marker!r}")
+            if repo in CF_ACCEPTANCE_REQUIRED:
+                cf_path = entry.get("cf_ci_workflow")
+                cf_marker = entry.get("cf_ci_marker")
+                if (
+                    not isinstance(cf_path, str)
+                    or not cf_path.startswith(".github/workflows/")
+                    or not isinstance(cf_marker, str)
+                    or not cf_marker
+                ):
+                    raise AuditError(f"{repo}: missing Context-Fabric PR acceptance policy")
+                cf_workflow = _read_repository_file(owner, repo, cf_path, fetch)
+                if not _has_pull_request_trigger(cf_workflow):
+                    raise AuditError(f"{repo}: Context-Fabric acceptance lacks pull_request trigger")
+                executable = (
+                    line.split(" #", 1)[0]
+                    for line in cf_workflow.splitlines()
+                    if not line.lstrip().startswith("#")
+                )
+                if not any(cf_marker in line for line in executable):
+                    raise AuditError(
+                        f"{repo}: Context-Fabric workflow lacks executable {cf_marker!r}"
+                    )
+                if "from cfabric.core import Fabric" not in cf_workflow:
+                    raise AuditError(f"{repo}: Context-Fabric CI can pass by skipping import")
+                cf_fixture = _read_repository_file(
+                    owner, repo, "tests/test_context_fabric_acceptance.py", fetch
+                )
+                if (
+                    "NativeFabric" not in cf_fixture
+                    or "_loaded_from_cfm" not in cf_fixture
+                    or "compiled_fabric" not in cf_fixture
+                ):
+                    raise AuditError(
+                        f"{repo}: Context-Fabric fixture lacks native and mmap parity probes"
+                    )
         else:
             issue = entry.get("issue")
             if not isinstance(issue, int) or isinstance(issue, bool) or issue <= 0:
