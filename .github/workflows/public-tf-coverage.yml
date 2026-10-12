@@ -2,15 +2,7 @@ name: Public TF corpus coverage
 
 on:
   push:
-    paths:
-      - scripts/audit_public_tf_corpora.py
-      - tests/test_public_tf_corpora.py
-      - .github/workflows/public-tf-coverage.yml
   pull_request:
-    paths:
-      - scripts/audit_public_tf_corpora.py
-      - tests/test_public_tf_corpora.py
-      - .github/workflows/public-tf-coverage.yml
   schedule:
     - cron: '17 7 * * 1'
   workflow_dispatch:
