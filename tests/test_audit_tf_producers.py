@@ -196,3 +196,81 @@ def test_pull_request_job_name_does_not_count_as_trigger() -> None:
     )
     with pytest.raises(AuditError, match="pull_request"):
         audit_inventory(manifest(), api(ci=false_event))
+
+
+def _context_fabric_case(
+    *,
+    workflow: str = (
+        "on:\n  pull_request:\njobs:\n  check:\n    steps:\n"
+        "      - run: python -c 'from cfabric.core import Fabric'\n"
+        "      - run: python -m pytest -q tests/test_context_fabric_acceptance.py -rs\n"
+    ),
+    fixture: str = "NativeFabric compiled_fabric _loaded_from_cfm",
+) -> tuple[dict[str, Any], Callable[[str], Any]]:
+    policy = manifest()
+    policy["producers"]["CATSS-TF"] = policy["producers"].pop("Corpus-TF")
+    entry = policy["producers"]["CATSS-TF"]
+    entry["cf_ci_workflow"] = ".github/workflows/context-fabric-acceptance.yml"
+    entry["cf_ci_marker"] = "python -m pytest -q tests/test_context_fabric_acceptance.py"
+    delegate = api()
+
+    def file_body(text: str) -> dict[str, str]:
+        return {"type": "file", "encoding": "base64", "content": base64.b64encode(
+            text.encode("utf-8")
+        ).decode()}
+
+    def fetch(url: str) -> Any:
+        if "/users/alexsosn/repos?" in url:
+            entries = delegate(url)
+            for item in entries:
+                if item["name"] == "Corpus-TF":
+                    item["name"] = "CATSS-TF"
+            return entries
+        if url.endswith("/contents/.github/workflows/context-fabric-acceptance.yml"):
+            return file_body(workflow)
+        if url.endswith("/contents/tests/test_context_fabric_acceptance.py"):
+            return file_body(fixture)
+        return delegate(url.replace("/CATSS-TF/", "/Corpus-TF/"))
+
+    return policy, fetch
+
+
+def test_required_context_fabric_producer_passes_with_executable_evidence() -> None:
+    policy, fetch = _context_fabric_case()
+    assert audit_inventory(policy, fetch)["supported"] == 1
+
+
+def test_context_fabric_required_gate_cannot_be_omitted() -> None:
+    policy, fetch = _context_fabric_case()
+    del policy["producers"]["CATSS-TF"]["cf_ci_workflow"]
+    with pytest.raises(AuditError, match="missing Context-Fabric"):
+        audit_inventory(policy, fetch)
+
+
+def test_context_fabric_gate_requires_actual_pr_trigger() -> None:
+    policy, fetch = _context_fabric_case(
+        workflow=(
+            "on:\n  push:\njobs:\n  test:\n    run: "
+            "python -m pytest -q tests/test_context_fabric_acceptance.py\n"
+            "# from cfabric.core import Fabric\n"
+        ),
+    )
+    with pytest.raises(AuditError, match="pull_request"):
+        audit_inventory(policy, fetch)
+
+
+def test_context_fabric_gate_rejects_comment_only_or_missing_import() -> None:
+    policy, fetch = _context_fabric_case(
+        workflow=(
+            "on:\n  pull_request:\njobs:\n  test:\n"
+            "# python -m pytest -q tests/test_context_fabric_acceptance.py\n"
+        ),
+    )
+    with pytest.raises(AuditError, match="lacks executable"):
+        audit_inventory(policy, fetch)
+
+
+def test_context_fabric_fixture_must_probe_compiled_reload() -> None:
+    policy, fetch = _context_fabric_case(fixture="NativeFabric only raw data")
+    with pytest.raises(AuditError, match="mmap parity probes"):
+        audit_inventory(policy, fetch)
