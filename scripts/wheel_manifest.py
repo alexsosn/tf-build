@@ -84,8 +84,14 @@ def _identity(
         opened_identity != completed_identity
         or size != last.st_size
         or not stat.S_ISREG(current.st_mode)
-        or (current.st_dev, current.st_ino, current.st_size)
-        != (last.st_dev, last.st_ino, last.st_size)
+        or (
+            current.st_dev, current.st_ino, current.st_size,
+            current.st_mtime_ns, current.st_ctime_ns,
+        )
+        != (
+            last.st_dev, last.st_ino, last.st_size,
+            last.st_mtime_ns, last.st_ctime_ns,
+        )
     ):
         raise WheelManifestError(f"wheel changed during hashing: {wheel.name}")
     return {"file": wheel.name, "bytes": size, "sha256": digest.hexdigest()}
