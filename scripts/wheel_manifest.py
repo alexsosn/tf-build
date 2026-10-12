@@ -16,6 +16,7 @@ import os
 import re
 import stat
 import tarfile
+import tempfile
 import tomllib
 import zipfile
 from collections.abc import Callable
@@ -257,9 +258,29 @@ def build_wheel_manifest(
 
 
 def write_wheel_manifest(path: Path, record: dict[str, Any]) -> None:
-    """Write canonical JSON exclusively; never overwrite previous evidence."""
-    with path.open("x", encoding="utf-8") as stream:
-        stream.write(json.dumps(record, sort_keys=True, indent=2) + "\n")
+    """Publish a complete canonical manifest without replacing existing evidence."""
+    # Serialize before creating files so invalid records leave no output.
+    payload = (json.dumps(record, sort_keys=True, indent=2) + "\n").encode("utf-8")
+    staging: Path | None = None
+    try:
+        # A sibling temporary file permits an atomic, create-only hardlink.
+        # Never expose incomplete evidence at the final destination pathname.
+        with tempfile.NamedTemporaryFile(
+            mode="wb",
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            dir=path.parent,
+            delete=False,
+        ) as stream:
+            staging = Path(stream.name)
+            stream.write(payload)
+            stream.flush()
+            os.fsync(stream.fileno())
+        # Unlike os.replace, hardlink creation refuses an existing pathname.
+        os.link(staging, path)
+    finally:
+        if staging is not None:
+            staging.unlink(missing_ok=True)
 
 
 def main() -> None:
