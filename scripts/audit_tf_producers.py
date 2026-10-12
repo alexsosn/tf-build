@@ -185,7 +185,7 @@ def audit_inventory(manifest: dict[str, Any], fetch: FetchJson) -> dict[str, int
                     raise AuditError(
                         f"{repo}: Context-Fabric acceptance lacks pull_request trigger"
                     )
-                executable = (
+                executable = tuple(
                     line.split(" #", 1)[0]
                     for line in cf_workflow.splitlines()
                     if not line.lstrip().startswith("#")
@@ -194,8 +194,10 @@ def audit_inventory(manifest: dict[str, Any], fetch: FetchJson) -> dict[str, int
                     raise AuditError(
                         f"{repo}: Context-Fabric workflow lacks executable {cf_marker!r}"
                     )
-                if "from cfabric.core import Fabric" not in cf_workflow:
-                    raise AuditError(f"{repo}: Context-Fabric CI can pass by skipping import")
+                if not any("from cfabric.core import Fabric" in line for line in executable):
+                    raise AuditError(
+                        f"{repo}: Context-Fabric CI lacks executable runtime import"
+                    )
                 cf_fixture = _read_repository_file(
                     owner, repo, "tests/test_context_fabric_acceptance.py", fetch
                 )
