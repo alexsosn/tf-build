@@ -279,9 +279,9 @@ def test_context_fabric_fixture_must_probe_compiled_reload() -> None:
 def test_context_fabric_import_guard_cannot_be_only_comment() -> None:
     policy, fetch = _context_fabric_case(
         workflow=(
-            "on:\\n  pull_request:\\njobs:\\n  test:\\n"
-            "  # from cfabric.core import Fabric\\n"
-            "  run: python -m pytest -q tests/test_context_fabric_acceptance.py -rs\\n"
+            "on:\n  pull_request:\njobs:\n  test:\n"
+            "  # from cfabric.core import Fabric\n"
+            "  run: python -m pytest -q tests/test_context_fabric_acceptance.py -rs\n"
         ),
     )
     with pytest.raises(AuditError, match="lacks executable runtime import"):
