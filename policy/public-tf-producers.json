@@ -46,7 +46,9 @@
       "status": "supported",
       "source_path": "src/catss_tf/canonical_materializer.py",
       "ci_workflow": ".github/workflows/ci.yml",
-      "ci_marker": "pytest -q"
+      "ci_marker": "pytest -q",
+      "cf_ci_workflow": ".github/workflows/context-fabric-acceptance.yml",
+      "cf_ci_marker": "python -m pytest -q tests/test_context_fabric_acceptance.py"
     },
     "CTC-TF": {
       "status": "supported",
@@ -64,13 +66,17 @@
       "status": "supported",
       "source_path": "src/iip_tf/tf_writer.py",
       "ci_workflow": ".github/workflows/validate-pinned-tf.yml",
-      "ci_marker": "python scripts/validate_pinned_tf.py"
+      "ci_marker": "python scripts/validate_pinned_tf.py",
+      "cf_ci_workflow": ".github/workflows/context-fabric-acceptance.yml",
+      "cf_ci_marker": "python -m pytest -q tests/test_context_fabric_acceptance.py"
     },
     "ORAEC-TF": {
       "status": "supported",
       "source_path": "src/oraec_tf/writer.py",
       "ci_workflow": ".github/workflows/writer-validation.yml",
-      "ci_marker": "oraec-tf convert"
+      "ci_marker": "oraec-tf convert",
+      "cf_ci_workflow": ".github/workflows/context-fabric-acceptance.yml",
+      "cf_ci_marker": "python -m pytest -q tests/test_context_fabric_acceptance.py"
     },
     "ORACC-TF": {
       "status": "supported",
