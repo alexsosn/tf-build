@@ -120,3 +120,23 @@ def test_symlinked_output_component_is_never_traversed(tmp_path: Path) -> None:
     alias.symlink_to(output, target_is_directory=True)
     with pytest.raises(AgoraOutputError, match="symlink"):
         agora_output_path(alias, "otype.tf")
+
+
+
+def test_reserved_host_receipt_descendant_cannot_displace_host_provenance(
+    tmp_path: Path,
+) -> None:
+    output = tmp_path / "output"
+    output.mkdir()
+
+    # The actual Agora host subsequently writes a regular root-level
+    # agora-materialization.json provenance file via O_EXCL.
+    with pytest.raises(AgoraOutputError, match="reserved"):
+        agora_output_path(output, "agora-materialization.json/payload.tf")
+
+    # Preflight must reject the collision before any artifact directories exist.
+    assert list(output.iterdir()) == []
+    # A namesake inside a corpus-owned child does not shadow the host receipt.
+    assert agora_output_path(output, "tf/agora-materialization.json") == (
+        output / "tf" / "agora-materialization.json"
+    )

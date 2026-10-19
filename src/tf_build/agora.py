@@ -64,7 +64,7 @@ def _relative_path(relative: str) -> tuple[str, ...]:
     ):
         raise AgoraOutputError("Agora artifact path must be a safe relative POSIX path")
 
-    if relative == _RESERVED_RECEIPT:
+    if relative.split("/", 1)[0] == _RESERVED_RECEIPT:
         raise AgoraOutputError(f"Agora artifact path is reserved by the host: {relative}")
     return tuple(relative.split("/"))
 
