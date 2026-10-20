@@ -432,6 +432,50 @@ def test_fetch_git_source_replaces_preexisting_empty_destination(tmp_path: Path)
     assert (destination / "tracked.txt").is_file()
 
 
+
+def test_fetch_existing_empty_source_destination_rejects_directory_replacement(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A different empty directory must not be removed after a long Git fetch."""
+    upstream, revision = _make_repo(tmp_path)
+    destination = tmp_path / "acquired"
+    displaced = tmp_path / "original-empty"
+    destination.mkdir()
+    original_inode = destination.stat().st_ino
+
+    real_verify = source_module.verify_git_source
+    substituted = False
+
+    def verify_then_replace(
+        staged_source: str | Path,
+        *,
+        expected_revision: str | None = None,
+        timeout_seconds: float = 1800.0,
+    ) -> source_module.SourceSnapshot:
+        nonlocal substituted
+        snapshot = real_verify(
+            staged_source,
+            expected_revision=expected_revision,
+            timeout_seconds=timeout_seconds,
+        )
+        # Real pinned Git fetch and detached checkout have already occurred.
+        # Replacing the empty target now deterministically reproduces the race.
+        destination.rename(displaced)
+        destination.mkdir()
+        substituted = True
+        return snapshot
+
+    monkeypatch.setattr(source_module, "verify_git_source", verify_then_replace)
+    with pytest.raises(FileExistsError, match="destination"):
+        source_module.fetch_git_source(str(upstream), destination, revision=revision)
+
+    assert substituted
+    assert displaced.is_dir() and not any(displaced.iterdir())
+    assert displaced.stat().st_ino == original_inode
+    assert destination.is_dir() and not any(destination.iterdir())
+    assert not tuple(tmp_path.glob(".acquired.tf-build-*"))
+    assert _git(upstream, "rev-parse", "HEAD") == revision
+
 def test_fetch_git_source_supports_sha256_repository(tmp_path: Path) -> None:
     try:
         source, revision = _make_repo(tmp_path, object_format="sha256")

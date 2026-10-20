@@ -131,6 +131,15 @@ credential-bearing acquisition URLs must not become reusable source metadata.
 This does not control credentials cached by external Git helpers or remove
 secrets from the running process.
 
+An **already existing empty destination** is accepted for backward compatibility.
+Its directory device/inode identity is recorded before fetching and checked
+again before the old empty directory is removed. If another actor replaces
+the directory during Git acquisition, publication fails rather than deleting
+that replacement. This narrows the long-fetch race but **does not make the
+identity-check/ordinary `rmdir()` sequence atomic**; concurrent mutation
+in that final interval remains outside this guarantee. Fresh destinations
+still use atomic no-clobber publication.
+
 Git inspection and acquisition commands have a generous **30-minute per-command**
 timeout by default, not an overall materialization deadline. Callers with
 different transport requirements can override it:
