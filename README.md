@@ -128,6 +128,8 @@ Acquisition fetches the pinned revision directly, without persisting the
 caller-supplied repository URL as a Git `origin` remote. The temporary
 `.git/FETCH_HEAD` ledger is removed before the detached checkout is published:
 credential-bearing acquisition URLs must not become reusable source metadata.
+This does not control credentials cached by external Git helpers or remove
+secrets from the running process.
 
 An **already existing empty destination** is accepted for backward compatibility.
 Its directory device/inode identity is recorded before fetching and checked
@@ -137,8 +139,6 @@ that replacement. This narrows the long-fetch race but **does not make the
 identity-check/ordinary `rmdir()` sequence atomic**; concurrent mutation
 in that final interval remains outside this guarantee. Fresh destinations
 still use atomic no-clobber publication.
-This does not control credentials cached by external Git helpers or remove
-secrets from the running process.
 
 Git inspection and acquisition commands have a generous **30-minute per-command**
 timeout by default, not an overall materialization deadline. Callers with
