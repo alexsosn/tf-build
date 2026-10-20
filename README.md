@@ -128,6 +128,15 @@ Acquisition fetches the pinned revision directly, without persisting the
 caller-supplied repository URL as a Git `origin` remote. The temporary
 `.git/FETCH_HEAD` ledger is removed before the detached checkout is published:
 credential-bearing acquisition URLs must not become reusable source metadata.
+
+An **already existing empty destination** is accepted for backward compatibility.
+Its directory device/inode identity is recorded before fetching and checked
+again before the old empty directory is removed. If another actor replaces
+the directory during Git acquisition, publication fails rather than deleting
+that replacement. This narrows the long-fetch race but **does not make the
+identity-check/ordinary `rmdir()` sequence atomic**; concurrent mutation
+in that final interval remains outside this guarantee. Fresh destinations
+still use atomic no-clobber publication.
 This does not control credentials cached by external Git helpers or remove
 secrets from the running process.
 
