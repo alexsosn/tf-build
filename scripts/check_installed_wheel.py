@@ -7,7 +7,10 @@ from __future__ import annotations
 
 import importlib
 import importlib.metadata
+import json
+import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 PUBLIC_APIS = {
@@ -22,6 +25,110 @@ PUBLIC_APIS = {
     "workspace": "BuildWorkspace",
 }
 
+
+
+def _check_publication_example(checkout: Path) -> None:
+    """Exercise the installed package's actual Text-Fabric publication workflow."""
+    from tf.fabric import Fabric
+
+    from tf_build.fingerprint import fingerprint_tree
+    from tf_build.validate import FeatureRequirement, validate_tf_artifact
+
+    example = checkout / "examples" / "tiny_tf_publication.py"
+    if not example.is_file():
+        raise RuntimeError("installed-wheel publication example is missing")
+
+    with tempfile.TemporaryDirectory(prefix="tf-build-installed-e2e-") as directory:
+        workspace = Path(directory)
+        destination = workspace / "published"
+        command = [sys.executable, "-I", str(example), str(destination)]
+
+        def run_example() -> subprocess.CompletedProcess[str]:
+            try:
+                return subprocess.run(
+                    command,
+                    cwd=workspace,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                    timeout=120,
+                )
+            except subprocess.TimeoutExpired as exc:
+                raise RuntimeError("installed-wheel publication example timed out") from exc
+
+        first = run_example()
+        if first.returncode != 0:
+            raise RuntimeError(
+                f"installed-wheel publication example failed with exit {first.returncode}"
+            )
+        try:
+            claimed = json.loads(first.stdout)
+        except (ValueError, TypeError) as exc:
+            raise RuntimeError("installed-wheel publication returned invalid JSON") from exc
+
+        expected = {
+            "otype.tf",
+            "oslots.tf",
+            "otext.tf",
+            "wordText.tf",
+            "attestation.tf",
+            "run-report.json",
+        }
+        if not destination.is_dir() or not all(
+            (destination / filename).is_file() for filename in expected
+        ):
+            raise RuntimeError("installed-wheel publication omitted required TF artifacts")
+
+        try:
+            report = json.loads(
+                (destination / "run-report.json").read_text(encoding="utf-8")
+            )
+        except (OSError, ValueError, TypeError) as exc:
+            raise RuntimeError("installed-wheel publication report is invalid") from exc
+        if report.get("schema") != 1 or report.get("producer", {}).get("name") != (
+            "tf-build-tiny-demo"
+        ):
+            raise RuntimeError("installed-wheel publication report identity mismatch")
+
+        validated = validate_tf_artifact(
+            destination,
+            level="all",
+            require_otext=True,
+            required_features=(
+                FeatureRequirement("wordText", kind="node", value_type="str"),
+                FeatureRequirement(
+                    "attestation", kind="edge", value_type="str", edge_values=True
+                ),
+            ),
+        )
+        if validated.level != "all":
+            raise RuntimeError("installed-wheel publication was not exhaustively reloaded")
+        fingerprint = fingerprint_tree(destination)
+        if not isinstance(claimed, dict) or (
+            claimed.get("algorithm") != fingerprint.algorithm
+            or claimed.get("digest") != fingerprint.digest
+            or claimed.get("files") != len(fingerprint.files)
+        ):
+            raise RuntimeError("installed-wheel publication fingerprint mismatch")
+
+        fabric = Fabric(locations=[str(destination)], silent="deep")
+        api = fabric.load("wordText attestation", silent="deep")
+        if (
+            api is None
+            or isinstance(api, bool)
+            or api.F.wordText.v(1) != "hello"
+            or api.F.wordText.v(2) != "world"
+            or api.E.attestation.f(3) != {1: "example"}
+        ):
+            raise RuntimeError("installed-wheel publication Text-Fabric query mismatch")
+
+        refused = run_example()
+        if refused.returncode == 0 or "exists" not in refused.stderr.lower():
+            raise RuntimeError("installed-wheel publication did not refuse overwrite")
+        if fingerprint_tree(destination) != fingerprint:
+            raise RuntimeError("installed-wheel publication mutated an existing artifact")
+
+    print("Installed-wheel Text-Fabric publication E2E PASS")
 
 def check_distribution(checkout: Path) -> None:
     """Reject missing, editable or incomplete installed wheels."""
@@ -60,6 +167,7 @@ def check_distribution(checkout: Path) -> None:
     else:
         raise RuntimeError("installed wheel lacks U+000D preflight behavior")
 
+    _check_publication_example(root)
     print(f"Installed tf-build {version} from {module_path}")
 
 
