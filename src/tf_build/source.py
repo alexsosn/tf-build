@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 import re
 import shutil
+import stat
 import subprocess
 import tempfile
 from dataclasses import dataclass
@@ -151,13 +152,16 @@ def fetch_git_source(
         raise GitSourceError(f"destination must not be a symlink: {target}")
 
     target_preexisted = target.exists()
+    original_empty_identity: tuple[int, int] | None = None
     if target_preexisted:
-        if not target.is_dir():
+        initial = target.lstat()
+        if not stat.S_ISDIR(initial.st_mode):
             raise GitSourceError(
                 f"destination exists and is not a directory: {target}"
             )
         if any(target.iterdir()):
             raise GitSourceError(f"destination is not empty: {target}")
+        original_empty_identity = (initial.st_dev, initial.st_ino)
 
     try:
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -208,6 +212,22 @@ def fetch_git_source(
         )
 
         if target_preexisted:
+            # The long Git fetch must not authorize deleting another actor's
+            # replacement directory at the same pathname. This identity check
+            # narrows but cannot eliminate the final check-to-rmdir race.
+            try:
+                current = target.lstat()
+            except FileNotFoundError as exc:
+                raise FileExistsError(
+                    f"destination changed during Git acquisition: {target}"
+                ) from exc
+            if (
+                not stat.S_ISDIR(current.st_mode)
+                or (current.st_dev, current.st_ino) != original_empty_identity
+            ):
+                raise FileExistsError(
+                    f"destination changed during Git acquisition: {target}"
+                )
             target.rmdir()
             removed_preexisting = True
 
