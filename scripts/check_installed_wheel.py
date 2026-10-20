@@ -29,7 +29,7 @@ PUBLIC_APIS = {
 
 def _check_publication_example(checkout: Path) -> None:
     """Exercise the installed package's actual Text-Fabric publication workflow."""
-    from tf.fabric import Fabric
+    from tf.fabric import Fabric  # type: ignore[import-untyped]
 
     from tf_build.fingerprint import fingerprint_tree
     from tf_build.validate import FeatureRequirement, validate_tf_artifact
@@ -118,7 +118,7 @@ def _check_publication_example(checkout: Path) -> None:
             or isinstance(api, bool)
             or api.F.wordText.v(1) != "hello"
             or api.F.wordText.v(2) != "world"
-            or api.E.attestation.f(3) != {1: "example"}
+            or api.E.attestation.f(3) != ((1, "example"),)
         ):
             raise RuntimeError("installed-wheel publication Text-Fabric query mismatch")
 
