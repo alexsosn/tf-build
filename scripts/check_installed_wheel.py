@@ -145,6 +145,12 @@ def check_distribution(checkout: Path) -> None:
     module_path = Path(package_file).resolve()
     if module_path.is_relative_to(root):
         raise RuntimeError(f"tf-build imports from editable checkout: {module_path}")
+    runtime_version = getattr(package, "__version__", None)
+    if runtime_version != version:
+        raise RuntimeError(
+            f"installed tf-build runtime version {runtime_version!r} "
+            f"does not match distribution {version!r}"
+        )
 
     for name, attr in sorted(PUBLIC_APIS.items()):
         module = importlib.import_module(f"tf_build.{name}")
