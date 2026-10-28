@@ -374,19 +374,28 @@ wheel ZIP and embedded `METADATA`, not merely its filename. PR builds check out
 the literal PR head for wheel provenance rather than the synthetic merge SHA.
 
 These are **development artifacts**, not signed attestations, frozen
-cross-platform dependency locks, permanent download URLs, or a published
-versioned release. The online CI job acquires dependencies *before* the
-offline smoke; a successful offline installation proves only that the
-prepared wheelhouse is sufficient for that runner/platform. Consumers must
-verify the manifest hashes after downloading and continue to use immutable
-source pins until a durable versioned release with dependency locking exists.
+cross-platform dependency locks or permanent download URLs. The online CI
+job acquires dependencies *before* the offline smoke; a successful offline
+installation proves only that the prepared wheelhouse is sufficient for that
+runner/platform. The durable [v0.1.0rc1 release](https://github.com/alexsosn/tf-build/releases/tag/v0.1.0rc1)
+was published on 2026-10-28 with independently verified asset SHA256 values.
+ORAEC-TF now installs that immutable released wheel from a hash-verified
+offline wheelhouse. New consumers must verify actual published assets and
+pin platform-specific dependency hashes; temporary CI artifacts alone do not
+establish a durable installation contract.
 
 
-## Versioned prerelease preparation
+## Versioned prerelease status and publication
 
-The proposed first candidate is `tf-build==0.1.0rc1` (tag `v0.1.0rc1`).
-A merged candidate PR or 30-day GitHub Actions artifact **is not** a published
-GitHub Release. CI builds real wheel and sdist archives, checks the embedded
+The first candidate, `tf-build==0.1.0rc1` (tag `v0.1.0rc1`), was
+[published on 2026-10-28](https://github.com/alexsosn/tf-build/releases/tag/v0.1.0rc1)
+from `65a3bbb42a238f2cd59931cca79ee01560fdd887`.
+**Known rc1 limitation:** the published distribution metadata correctly says
+`0.1.0rc1`, but the immutable wheel's exported `tf_build.__version__`
+still says `0.1.0.dev0`. Use installed distribution metadata
+(`importlib.metadata.version("tf-build")`) for rc1 version provenance.
+The next `0.1.0rc2` candidate fixes this mismatch but is **not published**.
+A merged candidate PR or 30-day GitHub Actions artifact is not a new GitHub Release. CI builds real wheel and sdist archives, checks the embedded
 package version, and records full source SHA plus exact asset SHA256 in
 `wheel-manifest.json`. It also rebuilds a *separate wheel from the emitted
 sdist* and smoke-installs its public APIs in a fresh environment, alongside
@@ -411,13 +420,14 @@ separators (including within `.dist-info/`) without extracting the archives.
 This is package-payload parity, not proof of byte-identical wheel archives,
 semantic correctness, signed provenance or locked dependencies.
 
-**Owner-controlled publication procedure** (only after final release approval):
+**Owner-controlled publication procedure for any subsequent release**
+(only after final release approval):
 
 1. Verify the exact reviewed main commit and its successful quality and
    distribution CI. Configure a protected GitHub Actions `release` environment
    with required reviewers and repository tag protection/immutability policy.
-2. Create the *existing* `v0.1.0rc1` tag at that reviewed main commit. The
-   workflow does not create, move or overwrite tags.
+2. Create the next version tag (for example `v0.1.0rc2`) at that reviewed
+   main commit. The workflow does not create, move or overwrite tags.
 3. Manually dispatch **Publish verified prerelease** from **main** with that
    tag and approve the release environment. It verifies tag ancestry and
    version, requires a successful main CI run on that exact tagged commit,
@@ -428,10 +438,10 @@ semantic correctness, signed provenance or locked dependencies.
    Verify each downloaded artifact's SHA256 against the actual manifest
    (e.g. `sha256sum FILE`). Record the real release URL and exact source
    revision in the downstream deployment record.
-5. Only then migrate consumers such as ORAEC-TF from the direct Git URL to
-   an explicitly versioned, dependency-locked, hash-verified offline
-   wheelhouse; test genuine installed consumer CLI and Text-Fabric outputs
-   in a fresh no-index environment.
+5. Only then migrate any remaining/new consumers to an explicitly
+   versioned, dependency-locked, hash-verified offline wheelhouse; test
+   genuine installed consumer CLI and Text-Fabric outputs in a fresh no-index
+   environment. ORAEC-TF already completed this process with rc1.
 
 Release workflow permissions are scoped to `contents: write` in its manually
 approved job. A source SHA and hash manifest are integrity evidence, **not**
