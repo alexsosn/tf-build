@@ -60,7 +60,7 @@ def _relative_path(relative: str) -> tuple[str, ...]:
         or "\\" in relative
         or bool(PureWindowsPath(relative).drive)
         or any(segment in {"", ".", ".."} for segment in relative.split("/"))
-        or "\x00" in relative
+        or any(ord(char) < 32 or ord(char) == 127 for char in relative)
     ):
         raise AgoraOutputError("Agora artifact path must be a safe relative POSIX path")
 

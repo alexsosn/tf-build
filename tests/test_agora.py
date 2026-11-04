@@ -12,6 +12,7 @@ from tf_build.agora import (
     optional_source_revision,
     prepare_agora_output,
 )
+from tf_build.report import ArtifactSummary
 
 
 def test_host_owned_empty_directory_is_checked_not_created(tmp_path: Path) -> None:
@@ -140,3 +141,34 @@ def test_reserved_host_receipt_descendant_cannot_displace_host_provenance(
     assert agora_output_path(output, "tf/agora-materialization.json") == (
         output / "tf" / "agora-materialization.json"
     )
+
+
+@pytest.mark.parametrize("control", [*(chr(code) for code in range(32)), chr(127)])
+@pytest.mark.parametrize("prefix", ["", "tf/"])
+def test_agora_artifact_paths_reject_ascii_controls(
+    tmp_path: Path, control: str, prefix: str
+) -> None:
+    output = tmp_path / "output"
+    output.mkdir()
+    relative = f"{prefix}token{control}text.tf"
+
+    # The exact same logical artifact path is already invalid in build reports.
+    with pytest.raises(ValueError, match="control characters"):
+        ArtifactSummary(relative, files=1, bytes=2)
+    with pytest.raises(AgoraOutputError, match="safe relative POSIX path") as caught:
+        agora_output_path(output, relative)
+
+    # Neither preflight nor the error diagnostic may create or echo unsafe paths.
+    assert control not in str(caught.value)
+    assert tuple(output.iterdir()) == ()
+
+
+def test_agora_artifact_path_remains_compatible_with_report_unicode(
+    tmp_path: Path,
+) -> None:
+    output = tmp_path / "output"
+    output.mkdir()
+    relative = "tf/𐎀 lexeme (draft)+copy.tf"
+    assert agora_output_path(output, relative) == output / relative
+    assert ArtifactSummary(relative, files=1, bytes=2).path == relative
+    assert tuple(output.iterdir()) == ()
