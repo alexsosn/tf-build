@@ -6,6 +6,7 @@ import hashlib
 import io
 import json
 import os
+import re
 import tarfile
 import tomllib
 import zipfile
@@ -165,7 +166,9 @@ def _sdist_fixture(
 def test_release_candidate_version_is_distinct_from_mutable_development_build() -> None:
     with (Path(__file__).parents[1] / "pyproject.toml").open("rb") as stream:
         project = tomllib.load(stream)["project"]
-    assert project["version"] == "0.1.0rc1"
+    # Candidate versions must not accidentally revert to a mutable dev build;
+    # the specific rc number advances independently of historical rc1 fixtures.
+    assert re.fullmatch(r"\d+\.\d+\.\d+rc\d+", project["version"]) is not None
 
 
 def test_release_manifest_binds_both_wheel_and_sdist_and_full_git_sha(
