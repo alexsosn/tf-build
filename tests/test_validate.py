@@ -496,3 +496,17 @@ def test_invalid_feature_requirement_name_rejected(name: str) -> None:
 def test_node_cannot_declare_edge_values_requirement() -> None:
     with pytest.raises(ValueError, match="edge_values"):
         FeatureRequirement("text", kind="node", edge_values=True)
+
+
+@pytest.mark.parametrize("control", [*(chr(code) for code in range(32)), chr(127)])
+def test_control_character_feature_requirement_name_rejected(control: str) -> None:
+    name = f"feature{control}name"
+    with pytest.raises(ValueError, match="feature name") as caught:
+        FeatureRequirement(name)
+    assert control not in str(caught.value)
+    assert name not in str(caught.value)
+
+
+def test_unicode_feature_requirement_name_remains_accepted() -> None:
+    name = "lexeme𐎀"
+    assert FeatureRequirement(name).name == name
