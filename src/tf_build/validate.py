@@ -44,6 +44,7 @@ class FeatureRequirement:
             or self.name in {".", ".."}
             or any(char in self.name for char in ("/", "\\"))
             or any(char.isspace() for char in self.name)
+            or any(ord(char) < 32 or ord(char) == 127 for char in self.name)
         ):
             raise ValueError("feature name must be a non-empty, safe TF filename stem")
         if self.kind not in (None, "node", "edge", "config"):
