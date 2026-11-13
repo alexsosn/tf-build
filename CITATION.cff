@@ -1,0 +1,10 @@
+cff-version: 1.2.0
+message: "If you use tf-build in research, please cite this software."
+type: software
+title: "tf-build"
+abstract: "Reusable build and materialization infrastructure for Text-Fabric corpora."
+authors:
+  - given-names: "Oleksandr (Alex)"
+    family-names: Sosnovshchenko
+repository-code: "https://github.com/alexsosn/tf-build"
+license: MIT
