@@ -2,7 +2,7 @@
 
 Reusable build and materialization infrastructure for [Text-Fabric](https://github.com/annotation/text-fabric) corpus projects.
 
-**Status: pre-0.1 bootstrap.** Public APIs are not yet stable.
+**Status: pre-1.0 release candidate.** `v0.1.0rc1` is published; the source-tree `0.1.0rc2` candidate is not. Public APIs are not yet stable.
 
 ## Scope
 
@@ -20,6 +20,8 @@ Corpus projects remain responsible for their source parsers, scholarly canonical
 tf-build does not aim to replace Text-Fabric's `CV.walk` / `Fabric.save`, and it does not duplicate Text-Fabric-Factory's generic XML/TEI/PageXML conversion stack.
 
 See [research.md](research.md), [design.md](design.md), and [plan.md](plan.md) for the evidence, architecture boundary and development sequence.
+
+**Actual converter adoption:** [ORAEC-TF and IIP-TF are merged production consumers](docs/consumer-adoption.md), with their concrete call sites, release wheel pins and original-source acceptance evidence recorded in the [consumer adoption matrix](docs/consumer-adoption.md). The CopticScriptorium-TF migration is separately tracked there as an open PR, not counted as merged.
 
 ## Operational build reports
 
