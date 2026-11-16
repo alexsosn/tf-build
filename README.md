@@ -21,7 +21,7 @@ tf-build does not aim to replace Text-Fabric's `CV.walk` / `Fabric.save`, and it
 
 See [research.md](research.md), [design.md](design.md), and [plan.md](plan.md) for the evidence, architecture boundary and development sequence.
 
-**Actual converter adoption:** [ORAEC-TF and IIP-TF are merged production consumers](docs/consumer-adoption.md), with their concrete call sites, release wheel pins and original-source acceptance evidence recorded in the [consumer adoption matrix](docs/consumer-adoption.md). The CopticScriptorium-TF migration is separately tracked there as an open PR, not counted as merged.
+**Actual converter adoption:** [ORAEC-TF, IIP-TF and CopticScriptorium-TF are merged production consumers](docs/consumer-adoption.md). Their concrete shared-library call sites, verified GitHub Release wheel pins and original-source/installed-user acceptance evidence are recorded in the [consumer adoption matrix](docs/consumer-adoption.md). Other converter integrations are not counted until they merge and pass their own end-to-end gates.
 
 ## Operational build reports
 
