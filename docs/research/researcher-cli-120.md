@@ -22,3 +22,9 @@ No new TF parser, corpus-normalization layer, structural ontology, package conso
 ## Test evidence to gather
 
 RED: real Tiny-TF fixture should fail `python -m tf_build validate ...` while the module entry point is absent. GREEN: genuine subprocess on a non-checkout working directory succeeds with `all` and produces parseable JSON, no writes to source `.tf`, and failure cases exit without a JSON success claim. Distribution CI must test the command against a freshly installed wheel.
+
+## CI-discovered failure: upstream Text-Fabric prints to stdout
+
+Exact-head [CI 44320585144](https://github.com/alexsosn/tf-build/actions/runs/44320585144) on `1ad2c0ff476030798464590f612f6d2d728ae353` ran real native-TF tests against Python 3.11–3.14. All four quality jobs reached **539 passed, one failed**. The failure was `test_researcher_default_catches_corrupt_unselected_feature`: the CLI exited nonzero as expected for invalid integer feature body `1\tNOT_AN_INTEGER`, but Text-Fabric printed `There was a fatal error! ... invalid literal for int()` to *stdout* before raising/returning a failed load. The installed wheel/sdist distribution job passed.
+
+The existing `validate_tf_artifact` API handles failure correctly; adding a separate parser or accepting non-JSON stdout would weaken the researcher CLI contract. Upstream console emissions are an implementation detail of Text-Fabric and should be isolated at the CLI boundary only. Avoid globally changing the validator's public console behavior, which consumers might rely on. A short error on stderr plus no success JSON is the desired CLI behavior. A discard-only stdout sink avoids buffering potentially large feature-error chatter in memory.
