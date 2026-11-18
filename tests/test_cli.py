@@ -41,7 +41,7 @@ def test_researcher_cli_exhaustively_reloads_real_tf_without_mutating_sources(
     assert result.returncode == 0, result.stderr
     inspected = json.loads(result.stdout)
     assert inspected == {
-        "feature_names": sorted(before),
+        "feature_names": sorted(Path(name).stem for name in before),
         "level": "all",
         "required_features": [],
     }
