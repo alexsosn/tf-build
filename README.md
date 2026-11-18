@@ -248,6 +248,37 @@ Agora, not tf-build, owns acquisition, sandbox/network enforcement, output
 validation and final promotion. These helpers never create the host root,
 execute conversion code or publish the user's destination.
 
+## Researcher command: validate an emitted native TF corpus
+
+The `0.1.0rc2` **source candidate** adds a command for inspecting an already
+generated native Text-Fabric directory directly from the installed package,
+without writing Python. **It is not available in the published
+`v0.1.0rc1` wheel.** Until rc2 is published, install the current source
+checkout with `python -m pip install -e .`.
+
+```bash
+# Exhaustively reload every shipped TF data feature (default).
+python -m tf_build validate /path/to/generated/tf --require-otext
+
+# Faster header-only inventory, without loading the feature bodies.
+python -m tf_build validate /path/to/generated/tf --level metadata
+
+# Reload the warp and implicit dependencies, but not all features.
+python -m tf_build validate /path/to/generated/tf --level selected
+```
+
+Success prints machine-readable JSON with `level`, `feature_names` and
+`required_features`; invalid artifacts produce a nonzero exit status and a
+diagnostic on stderr, with no success JSON. `otext.tf` is optional in Text-Fabric,
+so request it only for a corpus that requires a text configuration.
+
+The default `all` scan may be expensive for large corpora. It validates
+the native Text-Fabric structure and that all emitted feature bodies can be
+loaded from uncached raw `.tf` sources. It does **not** verify scholarly
+semantics, source-to-artifact data completeness, alignment accuracy or
+cross-corpus equivalence. For stricter per-feature kind/value-type contracts,
+use the Python `FeatureRequirement` API below.
+
 ## Text-Fabric artifact validation
 
 Use `tf_build.validate` to verify an emitted dataset independently of its
