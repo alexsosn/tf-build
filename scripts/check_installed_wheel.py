@@ -111,6 +111,38 @@ def _check_publication_example(checkout: Path) -> None:
         ):
             raise RuntimeError("installed-wheel publication fingerprint mismatch")
 
+        # A researcher can validate an independent emitted TF artifact directly
+        # from the installed wheel, without importing a checkout helper.
+        try:
+            inspection = subprocess.run(
+                [
+                    sys.executable, "-I", "-m", "tf_build", "validate",
+                    str(destination), "--require-otext",
+                ],
+                cwd=workspace,
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=120,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise RuntimeError("installed-wheel researcher CLI timed out") from exc
+        if inspection.returncode != 0:
+            raise RuntimeError(
+                "installed-wheel researcher CLI failed on a valid TF artifact: "
+                + inspection.stderr
+            )
+        try:
+            inspected = json.loads(inspection.stdout)
+        except (ValueError, TypeError) as exc:
+            raise RuntimeError("installed-wheel researcher CLI returned invalid JSON") from exc
+        if inspected != {
+            "level": "all",
+            "feature_names": sorted(path.stem for path in destination.glob("*.tf")),
+            "required_features": [],
+        }:
+            raise RuntimeError("installed-wheel researcher CLI reported incorrect TF coverage")
+
         fabric = Fabric(locations=[str(destination)], silent="deep")
         api = fabric.load("wordText attestation", silent="deep")
         if (
