@@ -8,7 +8,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
+from contextlib import redirect_stdout
 from pathlib import Path
 
 from .validate import ArtifactValidationError, validate_tf_artifact
@@ -39,11 +41,15 @@ def main(argv: list[str] | None = None) -> int:
 
     args = parser.parse_args(argv)
     try:
-        result = validate_tf_artifact(
-            args.artifact,
-            level=args.level,
-            require_otext=args.require_otext,
-        )
+        # Text-Fabric may print fatal load errors to stdout before raising.
+        # Keep CLI stdout reserved for a single successful JSON response.
+        with open(os.devnull, "w", encoding="utf-8") as sink:
+            with redirect_stdout(sink):
+                result = validate_tf_artifact(
+                    args.artifact,
+                    level=args.level,
+                    require_otext=args.require_otext,
+                )
     except ArtifactValidationError as exc:
         print(f"tf-build: validation failed: {exc}", file=sys.stderr)
         return 1
