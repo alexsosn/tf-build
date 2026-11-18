@@ -91,3 +91,25 @@ def test_researcher_cli_help_and_invalid_level(tmp_path: Path) -> None:
     assert invalid.returncode != 0
     assert invalid.stdout == ""
     assert "invalid choice" in invalid.stderr
+
+
+def test_researcher_default_catches_corrupt_unselected_feature(
+    tmp_path: Path, artifact: Path
+) -> None:
+    # A real emitted TF graph gains an unrelated integer feature whose data
+    # body is invalid. The upstream loader accepts its header but must refuse
+    # an exhaustive load; the original corpus's otext references wordText only.
+    (artifact / "count.tf").write_text(
+        "@node\\n@valueType=int\\n\\n1\\tNOT_AN_INTEGER\\n",
+        encoding="utf-8",
+    )
+    for level in ("metadata", "selected"):
+        shallow = _cli(tmp_path, "validate", str(artifact), "--level", level)
+        assert shallow.returncode == 0, shallow.stderr
+        assert json.loads(shallow.stdout)["level"] == level
+
+    complete = _cli(tmp_path, "validate", str(artifact))
+    assert complete.returncode != 0
+    assert complete.stdout == ""
+    assert "load" in complete.stderr.lower()
+    assert "Traceback" not in complete.stderr
