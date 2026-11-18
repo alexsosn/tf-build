@@ -1,5 +1,7 @@
 # tf-build agent instructions
 
+> **Autonomous-development policy:** Before selecting or inventing work, read [PRODUCT_GOALS.md](PRODUCT_GOALS.md) and [docs/agentic-development-policy.md](docs/agentic-development-policy.md). State the targeted researcher or downstream-consumer journey, observed blocker, minimal reuse-first solution and real-data/public-interface acceptance criterion. Follow proportional research → plan → TDD → test → logically independent adversarial review. Preserve all more specific source, editorial, security and release requirements below.
+
 > **Product-goal gate:** Before selecting a task or expanding the backlog, read [PRODUCT_GOALS.md](PRODUCT_GOALS.md). Prioritize its researcher journeys and minimum usable release; require concrete evidence for infrastructure work. Keep all mandatory source, security, licensing, TDD and independent-review checks below.
 
 tf-build is designed for autonomous, issue-driven development. Coding agents must treat this file as the mandatory entry point.

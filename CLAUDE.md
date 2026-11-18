@@ -1,3 +1,5 @@
+@AGENTS.md
+
 # Claude / coding-agent entry point
 
 The authoritative repository instructions are in [AGENTS.md](AGENTS.md).
