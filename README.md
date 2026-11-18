@@ -269,8 +269,10 @@ python -m tf_build validate /path/to/generated/tf --level selected
 
 Success prints machine-readable JSON with `level`, `feature_names` and
 `required_features`; invalid artifacts produce a nonzero exit status and a
-diagnostic on stderr, with no success JSON. `otext.tf` is optional in Text-Fabric,
-so request it only for a corpus that requires a text configuration.
+diagnostic on stderr, with no success JSON. If Text-Fabric prints a decoder
+error while rejecting a feature, the command includes its bounded diagnostic
+tail on stderr to aid inspection, not on stdout. `otext.tf` is optional in
+Text-Fabric, so request it only for a corpus that requires a text configuration.
 
 The default `all` scan may be expensive for large corpora. It validates
 the native Text-Fabric structure and that all emitted feature bodies can be
