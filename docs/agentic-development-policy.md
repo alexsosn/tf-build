@@ -8,12 +8,12 @@ Success is independently demonstrated reduction of duplicate code and correct in
 
 The primary customer is a downstream converter maintainer; evaluate first-user value through clean installed-wheel consumer work and real corpus build acceptance.
 
-## 1. Begin with the researcher's job
+## 1. Begin with the downstream maintainer's job
 
-At the start of a cycle, inspect current main, active PRs, recent issue/release states and the real supported installed/user-query paths. State the highest-impact unmet journey in PRODUCT_GOALS.md and what prevents a researcher from completing it. The backlog is evidence and work coordination, not the objective function.
+At the start of a cycle, inspect current main, active PRs, recent issue/release states and the real supported installed/user-query paths. State the highest-impact unmet consumer journey in PRODUCT_GOALS.md and what prevents a downstream converter maintainer from completing it. The backlog is evidence and work coordination, not the objective function.
 
 For the chosen task, identify:
-- **Outcome:** the researcher capability gained or observed failure removed.
+- **Outcome:** the downstream capability gained or observed failure removed.
 - **Evidence:** real code, source/registry data, a recent reproducible failure or a documented first-user blocker.
 - **Reuse:** the smallest existing mechanism that may solve it, and why a new component is unavoidable if proposed.
 - **Acceptance:** the public user path and actual data by which an independent reviewer can verify success.
@@ -48,7 +48,7 @@ Fix material findings, rerun relevant gates and re-review changed code at the fi
 
 For relevant changes, check **downstream requirement → installed shared primitive → actual converter build → real TF artifact → independent consumer smoke**. Use real pinned source or downstream consumer data where permitted; distinguish a transport smoke from proof of source scholarship. Test actual installed package and supported public client/consumer interface at major milestones and near release, with no hidden developer-only inputs. A generated manifest or Python-only smoke is insufficient evidence of host usability.
 
-Record exact observable results, versions, compatibility limitations, resource costs and clear failure states. Do not claim public release, source coverage, live CAL capability or researcher success based only on a merged PR.
+Record exact observable results, versions, compatibility limitations, resource costs and clear failure states. Do not claim package publication, proven downstream adoption, data coverage or consumer success based only on a merged PR.
 
 ## 6. Stop unproductive loops and finish
 
