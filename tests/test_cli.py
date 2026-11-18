@@ -112,4 +112,6 @@ def test_researcher_default_catches_corrupt_unselected_feature(
     assert complete.returncode != 0
     assert complete.stdout == ""
     assert "load" in complete.stderr.lower()
+    # The otherwise-hidden upstream TF decoder message must be actionable.
+    assert "NOT_AN_INTEGER" in complete.stderr
     assert "Traceback" not in complete.stderr

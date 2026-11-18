@@ -7,13 +7,26 @@ artifact validator and does not parse source corpora or infer scholarly meaning.
 from __future__ import annotations
 
 import argparse
+import io
 import json
-import os
 import sys
 from contextlib import redirect_stdout
 from pathlib import Path
 
 from .validate import ArtifactValidationError, validate_tf_artifact
+
+
+class _TFDiagnosticTail(io.TextIOBase):
+    """Retain a bounded tail of upstream TF console output for failure reports."""
+
+    _LIMIT = 2048
+
+    def __init__(self) -> None:
+        self.tail = ""
+
+    def write(self, message: str) -> int:
+        self.tail = (self.tail + message[-self._LIMIT :])[-self._LIMIT :]
+        return len(message)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -40,18 +53,20 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     args = parser.parse_args(argv)
+    diagnostics = _TFDiagnosticTail()
     try:
-        # Text-Fabric may print fatal load errors to stdout before raising.
-        # Keep CLI stdout reserved for a single successful JSON response.
-        with open(os.devnull, "w", encoding="utf-8") as sink:
-            with redirect_stdout(sink):
-                result = validate_tf_artifact(
-                    args.artifact,
-                    level=args.level,
-                    require_otext=args.require_otext,
-                )
+        # TF may print decoder errors to stdout and return an unsuccessful load.
+        # Capture only a short tail so success stdout remains JSON-only.
+        with redirect_stdout(diagnostics):
+            result = validate_tf_artifact(
+                args.artifact,
+                level=args.level,
+                require_otext=args.require_otext,
+            )
     except ArtifactValidationError as exc:
         print(f"tf-build: validation failed: {exc}", file=sys.stderr)
+        if details := diagnostics.tail.strip():
+            print(f"tf-build: Text-Fabric diagnostic: {details}", file=sys.stderr)
         return 1
 
     print(
