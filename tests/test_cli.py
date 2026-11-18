@@ -100,7 +100,7 @@ def test_researcher_default_catches_corrupt_unselected_feature(
     # body is invalid. The upstream loader accepts its header but must refuse
     # an exhaustive load; the original corpus's otext references wordText only.
     (artifact / "count.tf").write_text(
-        "@node\\n@valueType=int\\n\\n1\\tNOT_AN_INTEGER\\n",
+        "@node\n@valueType=int\n\n1\tNOT_AN_INTEGER\n",
         encoding="utf-8",
     )
     for level in ("metadata", "selected"):
