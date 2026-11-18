@@ -151,7 +151,7 @@ def _check_publication_example(checkout: Path) -> None:
         for source in destination.glob("*.tf"):
             shutil.copy2(source, malformed / source.name)
         (malformed / "count.tf").write_text(
-            "@node\\n@valueType=int\\n\\n1\\tNOT_AN_INTEGER\\n",
+            "@node\n@valueType=int\n\n1\tNOT_AN_INTEGER\n",
             encoding="utf-8",
         )
         invalid = subprocess.run(
