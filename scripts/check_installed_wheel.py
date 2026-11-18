@@ -8,6 +8,7 @@ from __future__ import annotations
 import importlib
 import importlib.metadata
 import json
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -142,6 +143,34 @@ def _check_publication_example(checkout: Path) -> None:
             "required_features": [],
         }:
             raise RuntimeError("installed-wheel researcher CLI reported incorrect TF coverage")
+
+        # An installed wheel must also give actionable errors on invalid
+        # *raw* native TF, without leaking upstream decoder output to stdout.
+        malformed = workspace / "malformed"
+        malformed.mkdir()
+        for source in destination.glob("*.tf"):
+            shutil.copy2(source, malformed / source.name)
+        (malformed / "count.tf").write_text(
+            "@node\\n@valueType=int\\n\\n1\\tNOT_AN_INTEGER\\n",
+            encoding="utf-8",
+        )
+        invalid = subprocess.run(
+            [sys.executable, "-I", "-m", "tf_build", "validate", str(malformed)],
+            cwd=workspace,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=120,
+        )
+        if (
+            invalid.returncode == 0
+            or invalid.stdout
+            or "NOT_AN_INTEGER" not in invalid.stderr
+            or "Traceback" in invalid.stderr
+        ):
+            raise RuntimeError(
+                "installed-wheel researcher CLI did not explain an invalid TF feature"
+            )
 
         fabric = Fabric(locations=[str(destination)], silent="deep")
         api = fabric.load("wordText attestation", silent="deep")
