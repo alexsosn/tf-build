@@ -107,6 +107,18 @@ jobs:
             --pyproject "$GITHUB_WORKSPACE/pyproject.toml" \
             --revision "$(git -C "$GITHUB_WORKSPACE" rev-parse HEAD)" \
             --output "$RUNNER_TEMP/wheels/wheel-manifest.json"
+      - name: Verify the emitted manifest against real built distributions
+        shell: bash
+        run: |
+          set -euo pipefail
+          python "$GITHUB_WORKSPACE/scripts/wheel_manifest.py" \
+            --wheel-dir "$RUNNER_TEMP/wheels" \
+            --wheelhouse "$RUNNER_TEMP/wheelhouse" \
+            --sdist-dir "$RUNNER_TEMP/sdist" \
+            --release-tag "v$(python -c 'import tomllib; print(tomllib.load(open("pyproject.toml","rb"))["project"]["version"])')" \
+            --pyproject "$GITHUB_WORKSPACE/pyproject.toml" \
+            --revision "$(git -C "$GITHUB_WORKSPACE" rev-parse HEAD)" \
+            --verify-existing "$RUNNER_TEMP/wheels/wheel-manifest.json"
       - uses: actions/upload-artifact@v4
         with:
           name: tf-build-dev-wheel-${{ github.event.pull_request.head.sha || github.sha }}
