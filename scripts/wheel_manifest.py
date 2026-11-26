@@ -263,10 +263,14 @@ def build_wheel_manifest(
     return record
 
 
+def _manifest_bytes(record: dict[str, Any]) -> bytes:
+    return (json.dumps(record, sort_keys=True, indent=2) + "\n").encode("utf-8")
+
+
 def write_wheel_manifest(path: Path, record: dict[str, Any]) -> None:
     """Publish a complete canonical manifest without replacing existing evidence."""
     # Serialize before creating files so invalid records leave no output.
-    payload = (json.dumps(record, sort_keys=True, indent=2) + "\n").encode("utf-8")
+    payload = _manifest_bytes(record)
     staging: Path | None = None
     try:
         # A sibling temporary file permits an atomic, create-only hardlink.
@@ -297,7 +301,9 @@ def main() -> None:
     parser.add_argument("--wheelhouse", type=Path)
     parser.add_argument("--sdist-dir", type=Path)
     parser.add_argument("--release-tag")
-    parser.add_argument("--output", type=Path, required=True)
+    destination = parser.add_mutually_exclusive_group(required=True)
+    destination.add_argument("--output", type=Path)
+    destination.add_argument("--verify-existing", type=Path, help="compare an existing manifest")
     args = parser.parse_args()
     manifest = build_wheel_manifest(
         args.wheel_dir,
@@ -307,7 +313,12 @@ def main() -> None:
         sdist_dir=args.sdist_dir,
         release_tag=args.release_tag,
     )
-    write_wheel_manifest(args.output, manifest)
+    if args.verify_existing is not None:
+        if args.verify_existing.read_bytes() != _manifest_bytes(manifest):
+            raise WheelManifestError("downloaded release manifest does not match inspected assets")
+        print("Release manifest verified")
+    else:
+        write_wheel_manifest(args.output, manifest)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,131 @@
+name: Promote verified release to PyPI
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing verified GitHub release tag
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pypi-promotion-${{ inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    outputs:
+      source: ${{ steps.release.outputs.source }}
+      version: ${{ steps.release.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Download and verify published distributions
+        id: release
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+((a|b|rc)[0-9]+)?$ ]]
+          source="$(git rev-parse --verify "refs/tags/${RELEASE_TAG}^{commit}")"
+          git merge-base --is-ancestor "$source" HEAD
+          version="${RELEASE_TAG#v}"
+          git show "$source:pyproject.toml" > "$RUNNER_TEMP/tagged-pyproject.toml"
+          mkdir "$RUNNER_TEMP/released"
+          base="https://github.com/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}"
+          for asset in "tf_build-${version}-py3-none-any.whl" "tf_build-${version}.tar.gz" wheel-manifest.json; do
+            curl --fail --location --retry 3 --silent --show-error \
+              --proto '=https' --proto-redir '=https' \
+              "$base/$asset" --output "$RUNNER_TEMP/released/$asset"
+          done
+          python scripts/wheel_manifest.py \
+            --wheel-dir "$RUNNER_TEMP/released" \
+            --sdist-dir "$RUNNER_TEMP/released" \
+            --pyproject "$RUNNER_TEMP/tagged-pyproject.toml" \
+            --revision "$source" --release-tag "$RELEASE_TAG" \
+            --verify-existing "$RUNNER_TEMP/released/wheel-manifest.json"
+          remote_tag="$(git ls-remote --refs origin "refs/tags/$RELEASE_TAG" | awk 'NF {print $1}')"
+          [[ "$remote_tag" == "$(git rev-parse "refs/tags/$RELEASE_TAG")" ]]
+          git checkout --detach "$source"
+          python -m venv "$RUNNER_TEMP/smoke"
+          vpy="$RUNNER_TEMP/smoke/bin/python"
+          cd "$RUNNER_TEMP"
+          "$vpy" -m pip --isolated install "released/tf_build-${version}-py3-none-any.whl"
+          "$vpy" -I -c 'import importlib.metadata, sys, tf_build; assert importlib.metadata.version("tf-build") == tf_build.__version__ == sys.argv[1]' "$version"
+          "$vpy" -I "$GITHUB_WORKSPACE/scripts/check_installed_wheel.py" "$GITHUB_WORKSPACE"
+          echo "source=$source" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: verified-python-distributions
+          path: |
+            ${{ runner.temp }}/released/*.whl
+            ${{ runner.temp }}/released/*.tar.gz
+          if-no-files-found: error
+
+  publish:
+    needs: prepare
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: verified-python-distributions
+          path: dist
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/
+
+  verify-index:
+    needs: [prepare, publish]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.source }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/download-artifact@v4
+        with:
+          name: verified-python-distributions
+          path: ${{ runner.temp }}/expected
+      - name: Download and smoke-test the public PyPI wheel
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          mkdir public-index
+          for attempt in 1 2 3 4 5; do
+            if python -m pip --isolated download --no-deps --only-binary=:all: \
+              --no-cache-dir --index-url https://pypi.org/simple \
+              --dest public-index "tf-build==$VERSION"; then
+              break
+            fi
+            [[ "$attempt" != 5 ]] || exit 1
+            sleep 15
+          done
+          wheel="tf_build-${VERSION}-py3-none-any.whl"
+          cmp "expected/$wheel" "public-index/$wheel"
+          python -m venv "$RUNNER_TEMP/smoke"
+          vpy="$RUNNER_TEMP/smoke/bin/python"
+          "$vpy" -m pip --isolated install --index-url https://pypi.org/simple "public-index/$wheel"
+          "$vpy" -I -c 'import importlib.metadata, sys, tf_build; assert importlib.metadata.version("tf-build") == tf_build.__version__ == sys.argv[1]' "$VERSION"
+          "$vpy" -I "$GITHUB_WORKSPACE/scripts/check_installed_wheel.py" "$GITHUB_WORKSPACE"

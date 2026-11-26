@@ -7,6 +7,8 @@ import io
 import json
 import os
 import re
+import subprocess
+import sys
 import tarfile
 import tomllib
 import zipfile
@@ -639,3 +641,57 @@ def test_manifest_identity_rejects_rewrite_after_final_fd_snapshot(
     assert after.st_ctime_ns != before.st_ctime_ns
     assert candidate.read_bytes() == replacement
     assert hashlib.sha256(candidate.read_bytes()).hexdigest() != original_sha256
+
+
+@pytest.mark.parametrize("change", ["none", "wheel", "sdist", "manifest", "source"])
+def test_verify_existing_release_manifest_cli_is_read_only(
+    tmp_path: Path, change: str,
+) -> None:
+    project, wheels, sdist = _sdist_fixture(tmp_path)
+    revision = "a" * 40
+    record = build_wheel_manifest(
+        wheels, project, revision, sdist_dir=sdist.parent,
+        release_tag="v0.1.0rc1",
+    )
+    manifest = wheels / "wheel-manifest.json"
+    write_wheel_manifest(manifest, record)
+    wheel = next(wheels.glob("*.whl"))
+    if change == "wheel":
+        # A valid ZIP with the same package identity but different bytes.
+        with zipfile.ZipFile(wheel, "a") as archive:
+            archive.writestr("tf_build/changed.py", "changed")
+    elif change == "sdist":
+        metadata = _VALID_SDIST_META
+        with tarfile.open(sdist, "w:gz") as archive:
+            item = tarfile.TarInfo("tf_build-0.1.0rc1/PKG-INFO")
+            item.size = len(metadata)
+            archive.addfile(item, io.BytesIO(metadata))
+            content = b"different sdist payload"
+            item = tarfile.TarInfo("tf_build-0.1.0rc1/changed.py")
+            item.size = len(content)
+            archive.addfile(item, io.BytesIO(content))
+    elif change == "manifest":
+        manifest.write_text(manifest.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+    elif change == "source":
+        revision = "b" * 40
+
+    before = {p: p.read_bytes() for p in (wheel, sdist, manifest)}
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(Path(__file__).parents[1] / "scripts/wheel_manifest.py"),
+            "--wheel-dir", str(wheels),
+            "--sdist-dir", str(sdist.parent),
+            "--pyproject", str(project),
+            "--revision", revision,
+            "--release-tag", "v0.1.0rc1",
+            "--verify-existing", str(manifest),
+        ],
+        capture_output=True, text=True, check=False,
+    )
+    if change == "none":
+        assert result.returncode == 0, result.stderr
+    else:
+        assert result.returncode != 0
+        assert "downloaded release manifest does not match" in result.stderr
+    assert {p: p.read_bytes() for p in before} == before
