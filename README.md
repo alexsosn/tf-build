@@ -484,6 +484,29 @@ a signed attestation; dependency wheels must be independently locked per
 target platform. Do not claim a release until the GitHub Release and verified
 assets really exist.
 
+### Optional promotion to PyPI
+
+PyPI distribution is not yet established. The owner must first confirm control
+or availability of the `tf-build` project name and configure a
+[PyPI Trusted Publisher](https://docs.pypi.org/trusted-publishers/creating-a-project-through-oidc/)
+with owner `alexsosn`, repository `tf-build`, workflow
+`publish-pypi.yml` and environment `pypi`. Configure that GitHub environment
+with required reviewers and restrict deployment to main.
+
+After an approved GitHub release exists, manually dispatch
+**Promote verified release to PyPI** from main with its exact tag. The
+workflow downloads the published wheel, sdist and manifest, checks the tag
+and canonical manifest against their actual bytes, and smoke-installs the
+wheel before passing only the two distributions to PyPA Trusted Publishing.
+It does not rebuild or replace GitHub assets. The known rc1 runtime-version
+mismatch prevents rc1 promotion; use a corrected, published release.
+
+After approval, the independent index job downloads the exact wheel from
+the public PyPI index, compares its bytes and repeats the installed-wheel
+Text-Fabric smoke. Do not claim PyPI availability or switch downstream
+requirements until that job succeeds. The existing GitHub-only publication
+procedure remains independent.
+
 ## Development
 
 Python 3.11+ is the initial supported runtime. Text-Fabric 13.x is the initial compatibility target.
